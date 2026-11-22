@@ -1,4 +1,5 @@
 import type {
+  AppetizerList,
   ArenaPricingSettings,
   NftCollectionAdminView,
   NftProvenance,
@@ -389,6 +390,15 @@ export function adminApi(token: string) {
     setFeedbackRead: (fid: string, read: boolean) => request<{ entry: FeedbackEntry; unread: number }>(`/api/admin/feedback/${id(fid)}`, { method: 'PUT', token, body: { read } }),
     readAllFeedback: () => request<{ unread: number }>('/api/admin/feedback/read-all', { method: 'POST', token }),
     deleteFeedback: (fid: string) => request<{ unread: number }>(`/api/admin/feedback/${id(fid)}`, { method: 'DELETE', token }),
+    /** The Appetizer cards (admin only; the visitor's claim and post link are `site.appetizer`). */
+    appetizers: {
+      /** `GET /api/admin/appetizers`: newest first (`q`: a handle or a wallet, any part), with the totals. */
+      list: (opts: { offset?: number; limit?: number; q?: string } = {}) => request<AppetizerList>(`/api/admin/appetizers${q({ offset: opts.offset, limit: opts.limit, q: opts.q })}`, { token }),
+      /** `GET /api/admin/appetizers.csv`: every card (no., handle, wallet, claimed, post, views). */
+      csv: () => downloadCsv('/api/admin/appetizers.csv', token, 'coinnibal-appetizers.csv'),
+      /** `DELETE /api/admin/appetizers/<code>`: removes one card. */
+      remove: (code: string) => request<{ ok: true; total: number; posted: number }>(`/api/admin/appetizers/${id(code)}`, { method: 'DELETE', token }),
+    },
     /** `GET /api/admin/arena-scaling`: the arena instance scaler's settings, every arena's instances and its decisions. */
     arenaScaling: () => request<ArenaScalingView>('/api/admin/arena-scaling', { token }),
     /** `PUT /api/admin/arena-scaling`: a partial update of the settings; answers like the GET. */

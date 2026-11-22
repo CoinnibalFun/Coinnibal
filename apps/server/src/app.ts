@@ -310,6 +310,7 @@ export async function createApp(
   if (cards.ok) log('share cards: @napi-rs/canvas ready');
   else {
     shares.setRenderBroken(cards.error);
+    site.appetizers.setRenderBroken(cards.error);
     log(`!!! share cards: @napi-rs/canvas cannot draw here (${cards.error}) — share images fall back to the site's picture; everything else works`);
   }
   const rooms = new RoomManager(
@@ -390,6 +391,7 @@ export async function createApp(
     leaderboards.flush();
     profiles.flush();
     shares.flush();
+    site.appetizers.flush();
   });
   shop.onCharges((wallet) => rooms.pushBoosts(wallet));
   // a removed (or replaced) picture comes off the live coins at once
@@ -566,6 +568,7 @@ export async function createApp(
       leaderboards.flush();
       profiles.flush();
       shares.flush();
+      site.appetizers.flush();
       gateway.close();
       await chain.stop().catch(() => {});
       server.closeAllConnections();

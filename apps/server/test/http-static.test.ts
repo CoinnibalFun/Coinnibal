@@ -307,7 +307,7 @@ describe('static web client', () => {
   describe('the prerendered landing (landing.html for /)', () => {
     const LANDING = '<!doctype html><html lang="en" data-theme="light"><title>Coinnibal</title><div id="root"><h1>prerendered</h1></div>' + '<p>landing</p>'.repeat(60);
     const APP = '<!doctype html><title>Coinnibal</title><div id="root"><div class="boot"></div></div>' + '<p>app</p>'.repeat(60);
-    const BUILT = { gameAccess: 'admins', mintOpen: false, wlOpen: false, collabOpen: false, xHandle: 'coinnibalfun' };
+    const BUILT = { gameAccess: 'admins', mintOpen: false, wlOpen: false, collabOpen: false, appetizerOpen: true, xHandle: 'coinnibalfun' };
 
     /** A web dist with both pages (and their precompressed copies) behind a server whose site store answers `live()`. */
     async function startLanding(live: (() => SiteSettings) | null): Promise<string> {
@@ -355,7 +355,7 @@ describe('static web client', () => {
     it('sends index.html for / as soon as a door is open, the game access or the handle differs, or landing.json is gone', async () => {
       let settings: SiteSettings = { ...SITE_SETTINGS_DEFAULT, xHandle: 'coinnibalfun' };
       const url = await startLanding(() => settings);
-      const changes: Partial<SiteSettings>[] = [{ wlOpen: true }, { mintOpen: true }, { collabOpen: true }, { gameAccess: 'public' }, { gameAccess: 'holders' }, { gameAccess: 'maintenance' }, { xHandle: 'someoneelse' }];
+      const changes: Partial<SiteSettings>[] = [{ wlOpen: true }, { mintOpen: true }, { collabOpen: true }, { appetizerOpen: false }, { gameAccess: 'public' }, { gameAccess: 'holders' }, { gameAccess: 'maintenance' }, { xHandle: 'someoneelse' }];
       for (const change of changes) {
         settings = { ...SITE_SETTINGS_DEFAULT, xHandle: 'coinnibalfun', ...change };
         const res = await raw(url + '/', { 'Accept-Encoding': 'br, gzip' });

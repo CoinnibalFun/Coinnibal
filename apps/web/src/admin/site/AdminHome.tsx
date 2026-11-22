@@ -8,6 +8,7 @@ import { ADMIN_GROUPS, CHAIN_GROUPS, GROUP_LABEL, adminHash, groupSummary, isAdm
 import type { AdminNetwork } from '../net';
 import { SummaryBar } from '../SummaryBar';
 import { AdminSessionBar, SignInCard, useAdminSession, type OwnerRole } from './AdminSession';
+import { AppetizersTab } from './AppetizersTab';
 import { AvatarsTab } from './AvatarsTab';
 import { CollabsTab } from './CollabsTab';
 import { FeedbackTab, useFeedbackUnread } from './FeedbackTab';
@@ -42,7 +43,8 @@ const BENCH: Record<AdminGroup, { title: string; lede: string }> = {
   community: { title: 'Community', lede: 'The WL, the chores applicants do, and the communities asking for spots.' },
   safety: { title: 'Safety', lede: 'Farming, feeding and collusion (evidence for a person to weigh, never a verdict), and the pictures players wear.' },
   feedback: { title: 'Feedback', lede: 'What players tell you from the game page: problems, ideas, questions.' },
-  settings: { title: 'Settings', lede: 'What visitors can see: the game (the same switch as in Game), the mint page, WL and collab applications. And the X handle.' },
+  appetizers: { title: 'Appetizers', lede: 'The early cards visitors claim on the landing page: the handle, the wallet, the post on X.' },
+  settings: { title: 'Settings', lede: 'What visitors can see: the game (the same switch as in Game), the mint page, WL and collab applications, Appetizer cards. And the X handle.' },
 };
 
 import { NetPill } from '../NetPill';
@@ -67,6 +69,8 @@ export function AdminHome({ net, reloadNet }: { net: AdminNetwork; reloadNet: ()
   const [unread, setUnread] = useFeedbackUnread(api);
   const tabs = useMemo(() => TABS.map((it) => (it.id === 'feedback' && unread ? { ...it, badge: unread } : it)), [unread]);
   const token = state.kind === 'admin' ? state.session.token : null;
+  // the Appetizers drawer's summary line: its own totals, as the drawer reads them
+  const [appetizerTotals, setAppetizerTotals] = useState<{ total: number; posted: number } | null>(null);
 
   useEffect(() => {
     const on = () => {
@@ -119,7 +123,7 @@ export function AdminHome({ net, reloadNet }: { net: AdminNetwork; reloadNet: ()
         <CoinCharacter paint="cream" mood="sleepy" size={96} feet />
         <div>
           <h2 className="ad-gate__title">{state.kind === 'checking' ? 'Checking the session…' : 'This drawer is locked.'}</h2>
-          <p>The WL, collab, task, integrity, feedback and site settings drawers open for the admin wallet. Sign in at the top right: one free signature, no transaction.</p>
+          <p>The WL, collab, task, integrity, feedback, appetizer and site settings drawers open for the admin wallet. Sign in at the top right: one free signature, no transaction.</p>
         </div>
       </section>
     );
@@ -138,6 +142,13 @@ export function AdminHome({ net, reloadNet }: { net: AdminNetwork; reloadNet: ()
       <>
         <SummaryBar summary={groupSummary('feedback', { net, status: null, feedbackUnread: unread })} />
         <FeedbackTab api={api} onUnread={setUnread} />
+      </>
+    );
+  else if (tab === 'appetizers')
+    panel = (
+      <>
+        <SummaryBar summary={groupSummary('appetizers', { net, status: null, appetizers: appetizerTotals })} />
+        <AppetizersTab api={api} onTotals={setAppetizerTotals} />
       </>
     );
   else if (tab === 'safety')
