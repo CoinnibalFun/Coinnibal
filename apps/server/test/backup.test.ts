@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { createHmac } from 'node:crypto';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,7 @@ import { createApp, type App } from '../src/app';
 import { loadConfig } from '../src/config';
 import { Limiter } from '../src/net/limiter';
 import { backupFileName } from '../src/site/backup';
+import { findInstallScript } from '../src/site/install-script';
 import { ArenaChain, arena } from './helpers';
 import { testSigner } from './signers';
 
@@ -128,9 +129,35 @@ describe('GET /api/admin/backup', () => {
     expect(statuses).toContain(429);
   });
 
+  it('GET /api/admin/install.sh hands the VPS installer to an admin session only (the new-server command curls it)', async () => {
+    const url = `http://127.0.0.1:${port}/api/admin/install.sh`;
+    expect((await fetch(url)).status).toBe(401);
+    expect((await fetch(url, { headers: { Authorization: `Bearer ${app.auth.issueToken(testSigner().address)}` } })).status).toBe(403);
+    // no proof needed: the installer is no secret, only the repository's address is kept out of the site bundle
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${app.auth.issueToken(admin)}` } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/^text\/plain/);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(await res.text()).toBe(readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../../deploy/vps/install.sh'), 'utf8'));
+    expect((await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${app.auth.issueToken(admin)}` } })).status).toBe(405);
+  });
+
   it('names the file after the chain and the UTC time', () => {
     expect(backupFileName(46630, Date.UTC(2026, 10, 4, 3, 5, 9))).toBe('coinnibal-data-46630-20261104-030509.tar.gz');
     expect(backupFileName(null, Date.UTC(2026, 0, 1))).toBe('coinnibal-data-nochain-20260101-000000.tar.gz');
+  });
+});
+
+describe('findInstallScript', () => {
+  it('finds deploy/vps/install.sh above the module: next to dist/ in the image, nothing elsewhere', () => {
+    const app = mkdtempSync(join(tmpdir(), 'coinnibal-image-'));
+    mkdirSync(join(app, 'deploy', 'vps'), { recursive: true });
+    mkdirSync(join(app, 'dist'));
+    writeFileSync(join(app, 'deploy', 'vps', 'install.sh'), '#!/usr/bin/env bash\n');
+    expect(findInstallScript(join(app, 'dist'))).toBe(join(app, 'deploy', 'vps', 'install.sh'));
+    expect(findInstallScript(mkdtempSync(join(tmpdir(), 'coinnibal-bare-')))).toBeNull();
+    // the repository's own copy, from the sources
+    expect(findInstallScript()).toBe(resolve(dirname(fileURLToPath(import.meta.url)), '../../../deploy/vps/install.sh'));
   });
 });
 

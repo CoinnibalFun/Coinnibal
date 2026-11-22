@@ -48,17 +48,21 @@ describe('the copied server commands keep the secrets off every command line', (
     expect(stdin).toBe(`Authorization: Bearer ${TOKEN}\nX-Coinnibal-Proof: ${PROOF}\n`);
   });
 
-  it('the new-server install: install.sh reads the token and the proof from its stdin, one per line', () => {
-    const { argv, stdin } = run(installCommand('https://game.coinnibal.fun', TOKEN, PROOF));
-    expect(argv[0]).toMatch(/^curl -fsSL https:\/\/raw\.githubusercontent\.com\/.*\/deploy\/vps\/install\.sh -o install\.sh$/);
-    expect(argv[1]).toBe('sudo bash install.sh --yes --from https://game.coinnibal.fun');
+  it('the new-server install: curl gets install.sh from the old server with the session on its stdin, then install.sh reads the token and the proof from its stdin', () => {
+    const { argv, stdin } = run(installCommand('https://game.coinnibal.fun/', TOKEN, PROOF));
+    expect(argv).toEqual(['curl -fsS -H @- https://game.coinnibal.fun/api/admin/install.sh -o install.sh', 'sudo bash install.sh --yes --from https://game.coinnibal.fun']);
     expect(argv.join('\n')).not.toContain('SECRET');
-    expect(stdin).toBe(`${TOKEN}\n${PROOF}\n`);
+    // curl's here-document first (its header), then install.sh's (one value per line)
+    expect(stdin).toBe(`Authorization: Bearer ${TOKEN}\n${TOKEN}\n${PROOF}\n`);
+  });
+
+  it('the new-server install names no repository (the site bundle ships it to every visitor)', () => {
+    expect(installCommand('https://game.coinnibal.fun', TOKEN, PROOF)).not.toMatch(/github|furkan|solagel/i);
   });
 
   it('a quote or a dollar in a value reaches stdin unchanged (the here-document is quoted)', () => {
     const { stdin } = run(installCommand('https://game.coinnibal.fun', "a'b$HOME`id`", PROOF));
-    expect(stdin).toBe(`a'b$HOME\`id\`\n${PROOF}\n`);
+    expect(stdin).toBe(`Authorization: Bearer a'b$HOME\`id\`\na'b$HOME\`id\`\n${PROOF}\n`);
   });
 
   it('starts with a space, so the shell history skips it (HISTCONTROL=ignoreboth on Ubuntu)', () => {
@@ -70,5 +74,6 @@ describe('the copied server commands keep the secrets off every command line', (
     expect(() => installCommand('https://game.coinnibal.fun', 'tok\nrm -rf /', PROOF)).toThrow(/line break/);
     expect(() => backupCurlCommand('https://game.coinnibal.fun', TOKEN, 'p\r')).toThrow(/line break/);
     expect(() => installCommand('https://game.coinnibal.fun', 'COINNIBAL_SECRETS', PROOF)).toThrow();
+    expect(() => installCommand('https://game.coinnibal.fun', TOKEN, 'COINNIBAL_AUTH')).toThrow();
   });
 });
