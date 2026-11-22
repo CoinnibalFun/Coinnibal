@@ -17,6 +17,9 @@
  *   (X has no public post there, or the post does not carry the card's link `/appetizer/<code>`). When X cannot be
  *   reached, or only answers without expanded links, the link is kept anyway with `verified: false` (the visitor is
  *   not blocked; the admin checks those by hand); `x_unreachable` is reserved for a future strict mode and not sent.
+ * - `GET /api/appetizer/post` → `AppetizerOurPostResponse`: our X post (`SiteSettings.appetizerPostUrl`, never any
+ *   other) as X's public embed endpoint shows it, for the sheet's post box; `post: null` while no post is set or X
+ *   cannot show it (the box then links to X only). Read from X at most every few minutes (cached).
  * - `GET /appetizer/<code>`: the share page (Open Graph / Twitter `summary_large_image` tags, the card as its image)
  *   that sends a person on to the landing page; `GET /appetizer/<code>.png`: the card, `APPETIZER_IMAGE` px.
  * - Admin (session): `GET /api/admin/appetizers?offset&limit` → `AppetizerList` (newest first);
@@ -86,6 +89,28 @@ export interface AppetizerPostResponse {
   ok: true;
   /** X showed the post, by the card's handle, carrying the card's link; false: kept unchecked (X did not answer). */
   verified: boolean;
+}
+
+/** Our X post as the sheet's box shows it (`GET /api/appetizer/post`). */
+export interface AppetizerOurPost {
+  /** The post's link (`appetizerPostUrl`, normalised). */
+  url: string;
+  /** The author's handle, without `@`. */
+  handle: string;
+  /** The author's display name. */
+  name: string;
+  /** The author's picture (`https://pbs.twimg.com/…`), or null. */
+  avatar: string | null;
+  /** The text as X shows it: links as X displays them, the picture's own link dropped. */
+  text: string;
+  /** The post's first picture (`https://pbs.twimg.com/…`), or null. */
+  photo: { url: string; width: number; height: number } | null;
+  /** Unix ms, when it was posted (null when X did not say). */
+  at: number | null;
+}
+
+export interface AppetizerOurPostResponse {
+  post: AppetizerOurPost | null;
 }
 
 /** One card as the admin reads it. */

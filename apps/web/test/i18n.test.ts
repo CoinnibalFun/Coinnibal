@@ -55,11 +55,13 @@ describe('the English string table', () => {
     expect(built.filter((k) => !keys.has(k))).toEqual([]);
   });
 
-  it('is non-empty, English and free of emoji', () => {
+  it('is non-empty, English and free of emoji (but for the X post texts listed here, with exactly these emoji)', () => {
+    // a post the visitor sends on X, not the site's own copy: the emoji it carries, and nothing else
+    const EMOJI_OK: Record<string, string[]> = { 'ld.ap.postText': ['\u{1F37D}', '\u{1FA99}'] };
     for (const [key, value] of Object.entries(en)) {
       expect(value.trim().length, key).toBeGreaterThan(0);
       expect(value, key).not.toMatch(TURKISH);
-      expect(value, key).not.toMatch(/\p{Extended_Pictographic}/u);
+      expect([...value.matchAll(/\p{Extended_Pictographic}/gu)].map((m) => m[0]), key).toEqual(EMOJI_OK[key] ?? []);
     }
   });
 

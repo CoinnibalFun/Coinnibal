@@ -6,6 +6,31 @@
 .ap-sheet {
   width: min(580px, 100%);
 }
+/* the checklist with our post beside it (wide screens, while the card is not served yet) */
+.ap-sheet.ap-sheet--cols {
+  width: min(980px, 100%);
+}
+/* the served card: room for "Post on X", the link field and "Save link" on one row */
+.ap-sheet.ap-sheet--served {
+  width: min(640px, 100%);
+}
+.ap-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
+  align-items: start;
+  gap: 28px;
+}
+.ap-cols__main {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+/* held in view while the checklist scrolls */
+.ap-cols__post {
+  position: sticky;
+  top: 0;
+  padding-top: 2px;
+}
 .ap-order,
 .ap-served {
   display: grid;
@@ -156,32 +181,103 @@
   flex-wrap: wrap;
   gap: 12px;
 }
-.ap-share > * {
-  flex: 1 1 200px;
+/* step 4: "Post on X", the post's link and "Save link" on one row, the field's label over the row and its hint under
+   the field (the field's own parts are laid out in the row's grid); stacked on phones, "Post on X" first */
+.ap-post {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 10px;
+  padding-top: 2px;
+}
+.ap-post__field {
+  display: contents;
+}
+.ap-post__field > .kb-field__label {
+  grid-row: 1;
+  grid-column: 2 / -1;
+}
+.ap-post__x {
+  grid-row: 2;
+  grid-column: 1;
+  white-space: nowrap;
+}
+.ap-post__x .st-xicon {
+  flex: none;
+}
+.ap-post__field > .kb-field__box {
+  grid-row: 2;
+  grid-column: 2;
+  min-width: 0;
+}
+.ap-post__save {
+  grid-row: 2;
+  grid-column: 3;
+  white-space: nowrap;
+}
+.ap-post__field > .kb-field__note {
+  grid-row: 3;
+  grid-column: 2 / -1;
+  margin-top: -2px;
+}
+@media (max-width: 639px) {
+  .ap-post {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ap-post__x {
+    grid-row: 1;
+    grid-column: 1;
+    margin-bottom: 6px;
+  }
+  .ap-post__field > .kb-field__label {
+    grid-row: 2;
+    grid-column: 1;
+  }
+  .ap-post__field > .kb-field__box {
+    grid-row: 3;
+    grid-column: 1;
+  }
+  .ap-post__field > .kb-field__note {
+    grid-row: 4;
+    grid-column: 1;
+  }
+  .ap-post__save {
+    grid-row: 5;
+    grid-column: 1;
+  }
+}
+.ap-cardlink {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 14px;
 }
 .ap-link {
-  margin: -4px 0 0;
+  margin: 0;
   font-size: var(--t-micro);
   color: var(--ink-3);
   overflow-wrap: anywhere;
+  /* the card's code is case-sensitive: shown as it is */
+  text-transform: none;
+  letter-spacing: 0.02em;
 }
-.ap-post {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 10px;
-  padding-top: 4px;
+.ap-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--teal-ink);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
-.ap-post .kb-btn {
-  margin-top: 26px;
-}
-@media (max-width: 479px) {
-  .ap-post {
-    grid-template-columns: 1fr;
-  }
-  .ap-post .kb-btn {
-    margin-top: 0;
-  }
+.ap-download:hover {
+  color: var(--ink);
 }
 .ap-thanks {
   display: flex;
@@ -306,4 +402,173 @@
 }
 .ap-locked svg {
   flex: none;
+}
+
+/* our X post, drawn in the site's own look (no script or frame from X): one link to the post, in a new tab */
+.ap-xpost {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px 16px;
+  border: var(--stroke) solid var(--outline);
+  border-radius: 16px;
+  background: var(--plain);
+  box-shadow: 5px 5px 0 var(--shadow-ink);
+  color: var(--ink);
+  text-decoration: none;
+  transition:
+    transform 0.12s var(--ease-out),
+    box-shadow 0.12s var(--ease-out);
+}
+.ap-xpost:hover {
+  transform: translate(-1px, -2px);
+  box-shadow: 6px 7px 0 var(--shadow-ink);
+}
+.ap-xpost:active {
+  transform: translate(3px, 3px);
+  box-shadow: 2px 2px 0 var(--shadow-ink);
+}
+.ap-xpost:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+.ap-xpost__kicker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: -2px;
+  font-size: var(--t-label);
+  color: var(--teal-ink);
+  text-transform: uppercase;
+}
+.ap-xpost__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.ap-xpost__avatar {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--sand);
+}
+.ap-xpost__avatar--x {
+  display: grid;
+  place-items: center;
+  background: var(--outline);
+  color: var(--cream);
+}
+.ap-xpost__who {
+  display: grid;
+  min-width: 0;
+}
+.ap-xpost__name {
+  overflow: hidden;
+  font-size: 15.5px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ap-xpost__handle {
+  overflow: hidden;
+  font-size: 13.5px;
+  color: var(--ink-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ap-xpost__fallback {
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+.ap-xpost__text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  font-size: 15px;
+  line-height: 1.45;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.ap-xpost__photo {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 170px;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: 12px;
+  object-fit: cover;
+  background: var(--sand);
+}
+.ap-xpost__date {
+  font-size: 13.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.ap-xpost__cta {
+  justify-self: stretch;
+  gap: 6px;
+}
+.ap-xpost__cta svg {
+  flex: none;
+}
+.ap-xpost__heart {
+  fill: currentColor;
+}
+/* the stand-in while it loads: the same shape, halftone bars */
+.ap-xpost__stand {
+  display: grid;
+  gap: 10px;
+}
+.ap-xpost__bars {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+}
+.ap-xpost__bars > span,
+.ap-xpost__line {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+}
+.ap-xpost__bars > span:first-child {
+  width: 46%;
+}
+.ap-xpost__bars > span:last-child {
+  width: 30%;
+}
+.ap-xpost__line--short {
+  width: 62%;
+}
+/* inside step 2 (narrower screens): a few lines, no picture, the step's own button right under it */
+.ap-xpost.is-compact {
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-radius: 14px;
+  box-shadow: 3px 3px 0 var(--shadow-ink);
+}
+.ap-xpost.is-compact .ap-xpost__avatar {
+  width: 34px;
+  height: 34px;
+}
+.ap-xpost.is-compact .ap-xpost__text {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  font-size: 14px;
+  /* a few lines of words, not of blank lines */
+  white-space: normal;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ap-xpost {
+    transition: none;
+  }
+  .ap-xpost:hover,
+  .ap-xpost:active {
+    transform: none;
+  }
 }
