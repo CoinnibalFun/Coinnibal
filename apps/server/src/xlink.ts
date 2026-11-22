@@ -92,6 +92,51 @@ export interface XPost {
    * `entities.urls[].expanded_url` and its link card's URL. Null when the answer had no expanded links (oEmbed).
    */
   urls: string[] | null;
+  /** What a reader sees (syndication only): `postView`. */
+  view?: XPostView;
+}
+
+/** A post as a reader sees it: the text with its links as X displays them (a picture's own link dropped), and its first picture. */
+export interface XPostView {
+  text: string;
+  photo: { url: string; width: number; height: number } | null;
+}
+
+const ENTITY: Record<string, string> = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" };
+/** A picture on X's own image host, https. */
+const PBS_RE = /^https:\/\/pbs\.twimg\.com\/[A-Za-z0-9_\-./]+\.(?:jpg|jpeg|png|webp)$/;
+
+/** The text and the first picture of a syndication answer, as X's own embed shows them. */
+export function postView(j: Record<string, unknown>): XPostView {
+  let text = typeof j.text === 'string' ? j.text : '';
+  // the links X expanded read as X shows them; what is left as t.co is a picture's own link (dropped)
+  const ents = j.entities as { urls?: unknown } | null | undefined;
+  if (ents && Array.isArray(ents.urls)) {
+    for (const u of ents.urls as Record<string, unknown>[]) {
+      if (u && typeof u.url === 'string' && typeof u.display_url === 'string') text = text.split(u.url).join(u.display_url);
+    }
+  }
+  text = text
+    .replace(/\s*https:\/\/t\.co\/[A-Za-z0-9]+/g, '')
+    .replace(/&(?:amp|lt|gt|quot|#39);/g, (e) => ENTITY[e])
+    .trim()
+    .slice(0, 1000);
+  let photo: XPostView['photo'] = null;
+  const pick = (url: unknown, w: unknown, h: unknown) => {
+    if (photo || typeof url !== 'string' || !PBS_RE.test(url)) return;
+    const width = Number(w);
+    const height = Number(h);
+    if (!(Number.isInteger(width) && width > 0 && Number.isInteger(height) && height > 0)) return;
+    photo = { url, width, height };
+  };
+  if (Array.isArray(j.photos)) for (const p of j.photos as Record<string, unknown>[]) if (p) pick(p.url, p.width, p.height);
+  if (Array.isArray(j.mediaDetails)) {
+    for (const m of j.mediaDetails as Record<string, unknown>[]) {
+      const info = (m?.original_info ?? {}) as Record<string, unknown>;
+      if (m) pick(m.media_url_https, info.width, info.height);
+    }
+  }
+  return { text, photo };
 }
 
 /** The expanded links of a syndication answer (`entities.urls`, the link card), at most 20. */
@@ -606,6 +651,7 @@ export class XLinkService {
           avatarUrl: xAvatarUrl(user.profile_image_url_https),
           createdAt: Number.isFinite(created) ? created : null,
           urls: expandedUrls(j),
+          view: postView(j),
         },
       };
     } catch (err) {

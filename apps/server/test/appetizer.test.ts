@@ -231,8 +231,8 @@ describe('the Appetizer: claims, post links, the share page and the admin list',
     expect(html).toContain(`<meta property="og:image" content="https://coinnibal.fun/appetizer/${code}.png">`);
     expect(html).toContain(`<meta name="twitter:image" content="https://coinnibal.fun/appetizer/${code}.png">`);
     expect(html).toContain('<meta property="og:image:height" content="675">');
-    expect(html).toContain('<title>Early card · The Appetizer No. 0001 · @Nibbler_01</title>');
-    expect(html).toContain('A Coinnibal early card for early fans.');
+    expect(html).toContain('<title>The Appetizer is out · Early card No. 0001 · @Nibbler_01</title>');
+    expect(html).toContain('Grabbed my seat before the coinnibals showed up. A Coinnibal early card for early fans.');
     expect(html).toContain('url=https://coinnibal.fun/#appetizer');
     expect(html.toLowerCase()).not.toContain(alice.toLowerCase().slice(2));
     expect((await h.call('GET', '/appetizer/AAAAAAAAAA')).status).toBe(404);
@@ -438,6 +438,43 @@ describe('the Appetizer: limits and fallbacks', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it('shows our post (appetizerPostUrl, only that one) for the sheet box: read from X once, cached, null when unset or unreadable', async () => {
+    const h = await harness();
+    const id = '2123416055406354866';
+    fakeX.synd.set(id, {
+      ...tweet(id, 'Coinnibalfun', 'The kitchen is open &amp; hungry https://t.co/x0 https://t.co/pic', ['https://coinnibal.fun']),
+      user: { id_str: '1', screen_name: 'Coinnibalfun', name: 'Coinnibal', profile_image_url_https: 'https://pbs.twimg.com/profile_images/1/me_normal.png' },
+      photos: [{ url: 'https://pbs.twimg.com/media/Gabc123.jpg', width: 1200, height: 675 }],
+    });
+    const calls = fakeX.calls;
+    const r = await h.call('GET', '/api/appetizer/post');
+    expect(r.status).toBe(200);
+    expect(r.headers.get('cache-control')).toBe('public, max-age=300');
+    expect(r.body.post).toMatchObject({
+      url: `https://x.com/Coinnibalfun/status/${id}`,
+      handle: 'Coinnibalfun',
+      name: 'Coinnibal',
+      avatar: 'https://pbs.twimg.com/profile_images/1/me_400x400.png',
+      text: 'The kitchen is open & hungry coinnibal.fun',
+      photo: { url: 'https://pbs.twimg.com/media/Gabc123.jpg', width: 1200, height: 675 },
+    });
+    // visitors share one read: no second call to X
+    expect(fakeX.calls).toBe(calls + 1);
+    expect((await h.call('GET', '/api/appetizer/post?url=https://x.com/a/status/1')).body.post.handle).toBe('Coinnibalfun');
+    expect(fakeX.calls).toBe(calls + 1);
+    expect((await h.call('POST', '/api/appetizer/post')).status).toBe(405);
+    // no post set: nothing, and X is not asked
+    h.app.site.store.updateSettings({ appetizerPostUrl: null });
+    expect((await h.call('GET', '/api/appetizer/post')).body).toEqual({ post: null });
+    // a post X does not show: null (the box links to X only)
+    h.app.site.store.updateSettings({ appetizerPostUrl: 'https://x.com/Coinnibalfun/status/77' });
+    expect((await h.call('GET', '/api/appetizer/post')).body).toEqual({ post: null });
+    h.app.site.store.updateSettings({ appetizerPostUrl: `https://x.com/Coinnibalfun/status/${id}` });
+    expect((await h.call('GET', '/api/appetizer/post')).body.post.handle).toBe('Coinnibalfun');
+    await h.app.close();
+    rmSync(h.dir, { recursive: true, force: true });
+  });
+
   it('the public launch switch leaves the appetizer open', () => {
     const dir = mkdtempSync(join(tmpdir(), 'coinnibal-appetizer-launch-'));
     mkdirSync(join(dir, 'site'), { recursive: true });
@@ -479,7 +516,7 @@ describe('the Appetizer: input helpers', () => {
 
   it('the page escapes what it prints', () => {
     const html = appetizerPage({ code: 'AbCdEfGhIj', no: 42, handle: 'a_b', at: 0 }, 'https://coinnibal.fun');
-    expect(html).toContain('Early card · The Appetizer No. 0042 · @a_b');
+    expect(html).toContain('The Appetizer is out · Early card No. 0042 · @a_b');
     expect(html).not.toMatch(/<script/i);
   });
 });

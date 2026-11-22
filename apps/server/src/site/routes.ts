@@ -787,7 +787,8 @@ export class SiteApi {
 
   /**
    * The Appetizer, open to every visitor (no session): `POST /api/appetizer {wallet, handle, followed, liked?}` claims a card (while
-   * `appetizerOpen` is on), `POST /api/appetizer/<code>/post {url}` records the X post that shared it. Refusals answer
+   * `appetizerOpen` is on), `POST /api/appetizer/<code>/post {url}` records the X post that shared it, `GET
+   * /api/appetizer/post` shows our X post (`appetizerPostUrl`) for the sheet's box. Refusals answer
    * `{ error: AppetizerError, message, field? }`.
    */
   private async appetizerRoutes(req: IncomingMessage, res: ServerResponse, path: string, ip: string): Promise<void> {
@@ -795,6 +796,11 @@ export class SiteApi {
     if (path === '/api/appetizer') {
       this.method(req, 'POST');
       return this.appetizers.claimRoute(req, res, ip, this.store.settings.appetizerOpen, read, send);
+    }
+    if (path === '/api/appetizer/post') {
+      // our post (the one setting, never a link the visitor names) for the sheet's box
+      const m = this.method(req, 'GET', 'HEAD');
+      return this.appetizers.ourPostRoute(res, this.store.settings.appetizerPostUrl, m === 'HEAD');
     }
     const m = /^\/api\/appetizer\/([^/]+)\/post$/.exec(path);
     if (!m) throw new SiteFail(404, 'not_found', 'Not found');
