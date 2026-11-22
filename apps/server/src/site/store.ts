@@ -262,6 +262,8 @@ export class SiteStore {
         gameAccess: isGameAccess(settings.gameAccess) ? settings.gameAccess : d.gameAccess,
         xHandle: handle && !previous ? handle : d.xHandle,
         launchPostUrl: isXStatusUrl(settings.launchPostUrl) ? settings.launchPostUrl : null,
+        // a file saved before the setting existed gets the default; a stored null (the step hidden) stays null
+        appetizerPostUrl: !('appetizerPostUrl' in settings) ? d.appetizerPostUrl : isXStatusUrl(settings.appetizerPostUrl) ? settings.appetizerPostUrl : null,
       };
       if (previous) {
         this.log(`site: xHandle @${handle} is a previous default; now @${this.settingsV.xHandle}`);
@@ -336,6 +338,9 @@ export class SiteStore {
           break;
         case 'launchPostUrl':
           next.launchPostUrl = body.launchPostUrl === null || body.launchPostUrl === '' ? null : v.statusUrl(body.launchPostUrl, 'launchPostUrl');
+          break;
+        case 'appetizerPostUrl':
+          next.appetizerPostUrl = body.appetizerPostUrl === null || body.appetizerPostUrl === '' ? null : v.statusUrl(body.appetizerPostUrl, 'appetizerPostUrl');
           break;
         default:
           throw bad(key, `unknown setting ${key}`);

@@ -56,7 +56,7 @@ import type {
 import { SERVER } from '../config';
 import { X_HANDLE_BUILD, getLocale, t, type TKey } from '../i18n';
 // the visitor's Appetizer routes (`site.appetizer`)
-import type { AppetizerPostRequest, AppetizerRequest, AppetizerResponse } from '@coinnibal/shared';
+import type { AppetizerPostRequest, AppetizerPostResponse, AppetizerRequest, AppetizerResponse } from '@coinnibal/shared';
 
 /**
  * The site API (`/api/site/*`, `/api/admin/*`, `/api/auth/*`). Every error is a
@@ -329,12 +329,13 @@ export const site = {
   /**
    * The Appetizer (`appetizer.ts` in shared): `claim` hands a card to a wallet and an X handle (the answer never
    * carries the wallet); `post` records the link of the X post that shared it. Errors carry the server's
-   * `AppetizerError` as `code` (`closed`, `bad_wallet`, `bad_handle`, `handle_taken`, `bad_post`, `rate_limited`).
+   * `AppetizerError` as `code` (`closed`, `follow_required`, `bad_wallet`, `bad_handle`, `handle_taken`, `bad_post`,
+   * `post_unverified`, `rate_limited`). `post` answers whether X showed the post carrying the card (`verified`).
    */
   appetizer: {
     claim: (body: AppetizerRequest) => request<AppetizerResponse>('/api/appetizer', { method: 'POST', body }),
     post: (code: string, url: string) =>
-      request<{ ok: true }>(`/api/appetizer/${encodeURIComponent(code)}/post`, { method: 'POST', body: { url } satisfies AppetizerPostRequest }),
+      request<AppetizerPostResponse>(`/api/appetizer/${encodeURIComponent(code)}/post`, { method: 'POST', body: { url } satisfies AppetizerPostRequest }),
   },
 };
 
@@ -404,12 +405,16 @@ export function adminApi(token: string) {
     deleteFeedback: (fid: string) => request<{ unread: number }>(`/api/admin/feedback/${id(fid)}`, { method: 'DELETE', token }),
     /** The Appetizer cards (admin only; the visitor's claim and post link are `site.appetizer`). */
     appetizers: {
-      /** `GET /api/admin/appetizers`: newest first (`q`: a handle or a wallet, any part), with the totals. */
-      list: (opts: { offset?: number; limit?: number; q?: string } = {}) => request<AppetizerList>(`/api/admin/appetizers${q({ offset: opts.offset, limit: opts.limit, q: opts.q })}`, { token }),
-      /** `GET /api/admin/appetizers.csv`: every card (no., handle, wallet, claimed, post, views). */
+      /**
+       * `GET /api/admin/appetizers`: newest first (`q`: a handle or a wallet, any part; `complete`: with or without a post
+       * link), with the totals.
+       */
+      list: (opts: { offset?: number; limit?: number; q?: string; complete?: boolean } = {}) =>
+        request<AppetizerList>(`/api/admin/appetizers${q({ offset: opts.offset, limit: opts.limit, q: opts.q, complete: opts.complete === undefined ? undefined : opts.complete ? 1 : 0 })}`, { token }),
+      /** `GET /api/admin/appetizers.csv`: every card (no., handle, wallet, claimed, followed, liked, post, post_verified, complete, views). */
       csv: () => downloadCsv('/api/admin/appetizers.csv', token, 'coinnibal-appetizers.csv'),
       /** `DELETE /api/admin/appetizers/<code>`: removes one card. */
-      remove: (code: string) => request<{ ok: true; total: number; posted: number }>(`/api/admin/appetizers/${id(code)}`, { method: 'DELETE', token }),
+      remove: (code: string) => request<{ ok: true; total: number; posted: number; verified: number }>(`/api/admin/appetizers/${id(code)}`, { method: 'DELETE', token }),
     },
     /** `GET /api/admin/arena-scaling`: the arena instance scaler's settings, every arena's instances and its decisions. */
     arenaScaling: () => request<ArenaScalingView>('/api/admin/arena-scaling', { token }),

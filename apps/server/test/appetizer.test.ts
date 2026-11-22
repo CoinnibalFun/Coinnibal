@@ -6,13 +6,44 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp, type App } from '../src/app';
 import { loadConfig } from '../src/config';
 import { Limiter } from '../src/net/limiter';
-import { AppetizerService, appetizerPage, claimHandle, claimWallet, parsePostUrl } from '../src/site/appetizer';
+import { AppetizerService, appetizerPage, claimHandle, claimWallet, parsePostUrl, postCarriesCard } from '../src/site/appetizer';
+import type { XFetch } from '../src/xlink';
 import type { SiteLimits } from '../src/site/routes';
 import { SITE_FILES, SiteStore } from '../src/site/store';
 import { ArenaChain, arena } from './helpers';
 import { testSigner } from './signers';
 
 const roomy = () => new Limiter(10_000, 60_000);
+
+/**
+ * A fake X: what the syndication endpoint (`synd`) and the oEmbed endpoint (`oembed`) answer for a post id: a JSON
+ * body, an HTTP status, or 'throw' (unreachable). An id neither knows answers 404 (no such post).
+ */
+const fakeX = { synd: new Map<string, unknown>(), oembed: new Map<string, unknown>(), calls: 0 };
+const xFetch: XFetch = async (url) => {
+  fakeX.calls++;
+  const synd = url.startsWith('https://cdn.syndication.twimg.com/');
+  const id = synd ? /[?&]id=(\d+)/.exec(url)![1] : /status%2F(\d+)/.exec(url)![1];
+  const v = (synd ? fakeX.synd : fakeX.oembed).get(id);
+  if (v === 'throw') throw new TypeError('fetch failed');
+  const status = typeof v === 'number' ? v : v === undefined ? 404 : 200;
+  const bytes = Buffer.from(status === 200 ? JSON.stringify(v) : '');
+  return {
+    ok: status < 400,
+    status,
+    headers: { get: (n: string) => (n.toLowerCase() === 'content-type' ? 'application/json' : null) },
+    arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+  };
+};
+/** A syndication answer: a post by `handle` with `text` and the links X expanded. */
+const tweet = (id: string, handle: string, text: string, expanded: string[] = []) => ({
+  __typename: 'Tweet',
+  id_str: id,
+  text,
+  created_at: new Date().toISOString(),
+  entities: { urls: expanded.map((u, i) => ({ url: `https://t.co/x${i}`, expanded_url: u, display_url: u.replace(/^https:\/\//, '') })) },
+  user: { id_str: '1700000000000000001', screen_name: handle, name: 'Fan' },
+});
 
 interface Harness {
   app: App;
@@ -32,6 +63,7 @@ async function harness(limits: Partial<SiteLimits> = {}): Promise<Harness> {
     persist: true,
     siteLimits: { writeIp: roomy(), writeWallet: roomy(), login: roomy(), appetizerIp: roomy(), appetizerPostIp: roomy(), ...limits },
     apiLimiter: roomy(),
+    xFetch,
   });
   const port = await app.listen();
   const call: Harness['call'] = async (method, path, opts = {}) => {
@@ -56,7 +88,7 @@ async function harness(limits: Partial<SiteLimits> = {}): Promise<Harness> {
   return { app, dir, admin, port, call };
 }
 
-const claim = (h: Harness, wallet: string, handle: string) => h.call('POST', '/api/appetizer', { body: { wallet, handle } });
+const claim = (h: Harness, wallet: string, handle: string, extra: Record<string, unknown> = {}) => h.call('POST', '/api/appetizer', { body: { wallet, handle, followed: true, ...extra } });
 
 describe('the Appetizer: claims, post links, the share page and the admin list', () => {
   let h: Harness;
@@ -88,7 +120,7 @@ describe('the Appetizer: claims, post links, the share page and the admin list',
     expect(typeof first.card.at).toBe('number');
     expect(r.text.toLowerCase()).not.toContain(alice.toLowerCase().slice(2));
     // the next wallet gets the next number; a profile link counts as its handle
-    const b = await claim(h, bob, 'https://x.com/CoinFan');
+    const b = await claim(h, bob, 'https://x.com/CoinFan', { liked: true });
     expect(b.status).toBe(201);
     expect(b.body.card).toMatchObject({ no: 2, handle: 'CoinFan' });
   });
@@ -115,18 +147,29 @@ describe('the Appetizer: claims, post links, the share page and the admin list',
   it('refuses a bad wallet or handle', async () => {
     const wallets = ['nope', '0x' + '0'.repeat(40), '0x' + 'a'.repeat(39), 42, null];
     for (const wallet of wallets) {
-      const r = await h.call('POST', '/api/appetizer', { body: { wallet, handle: 'fine_one' } });
+      const r = await h.call('POST', '/api/appetizer', { body: { wallet, handle: 'fine_one', followed: true } });
       expect(r.status).toBe(400);
       expect(r.body).toMatchObject({ error: 'bad_wallet', field: 'wallet' });
     }
     for (const handle of ['', 'a-b', 'x'.repeat(16), '@', 7]) {
-      const r = await h.call('POST', '/api/appetizer', { body: { wallet: testSigner().address, handle } });
+      const r = await h.call('POST', '/api/appetizer', { body: { wallet: testSigner().address, handle, followed: true } });
       expect(r.status).toBe(400);
       expect(r.body).toMatchObject({ error: 'bad_handle', field: 'handle' });
     }
     expect((await h.call('POST', '/api/appetizer', { raw: 'wallet=1', type: 'text/plain' })).status).toBe(415);
     expect((await h.call('POST', '/api/appetizer', { raw: JSON.stringify({ wallet: alice, handle: 'x'.repeat(APPETIZER_LIMITS.bodyBytes) }) })).status).toBe(413);
     expect((await h.call('GET', '/api/appetizer')).status).toBe(405);
+  });
+
+  it('needs the follow: 400 follow_required without followed: true, and no card handed out', async () => {
+    const wallet = testSigner().address;
+    for (const body of [{ wallet, handle: 'no_follow' }, { wallet, handle: 'no_follow', followed: false }, { wallet, handle: 'no_follow', followed: 'true' }, { wallet, handle: 'no_follow', followed: 1 }]) {
+      const r = await h.call('POST', '/api/appetizer', { body });
+      expect(r.status).toBe(400);
+      expect(r.body).toMatchObject({ error: 'follow_required', field: 'followed' });
+    }
+    const list = (await h.call('GET', '/api/admin/appetizers?q=no_follow', { wallet: h.admin })).body as AppetizerList;
+    expect(list.items).toEqual([]);
   });
 
   it('answers 403 closed while the admin has it off', async () => {
@@ -139,23 +182,38 @@ describe('the Appetizer: claims, post links, the share page and the admin list',
     expect((await claim(h, testSigner().address, 'late_one')).status).toBe(201);
   });
 
-  it('records the X post that shared a card: by the card handle only, normalised', async () => {
+  it('records the X post that shared a card: by the card handle only, normalised, checked on X', async () => {
     const code = first.card.code;
+    const link = `https://coinnibal.fun/appetizer/${code}`;
+    // the post as the X intent writes it: the link shortened in the text, expanded in the entities
+    fakeX.synd.set('1888888888888888888', tweet('1888888888888888888', 'Nibbler_01', 'Got my Coinnibal early card https://t.co/x0', [link]));
+    fakeX.synd.set('42', tweet('42', 'Nibbler_01', `Early card, look: coinnibal.fun/appetizer/${code}`));
     const post = (url: unknown) => h.call('POST', `/api/appetizer/${code}/post`, { body: { url } });
+    const calls = fakeX.calls;
     for (const bad of ['https://x.com/CoinFan/status/123', 'https://x.com/Nibbler_01', 'http://x.com/Nibbler_01/status/1', 'https://evil.com/Nibbler_01/status/1', 'nope', 7, `https://x.com/Nibbler_01/status/1?${'a'.repeat(300)}`]) {
       const r = await post(bad);
       expect(r.status).toBe(400);
       expect(r.body.error).toBe('bad_post');
     }
-    expect((await post('https://mobile.twitter.com/nibbler_01/status/1888888888888888888?s=20&t=abc')).body).toEqual({ ok: true });
+    // a malformed link or a link by another handle never reaches X
+    expect(fakeX.calls).toBe(calls);
+    expect((await post('https://mobile.twitter.com/nibbler_01/status/1888888888888888888?s=20&t=abc')).body).toEqual({ ok: true, verified: true });
     let list = (await h.call('GET', '/api/admin/appetizers', { wallet: h.admin })).body as AppetizerList;
     const mine = list.items.find((e) => e.code === code)!;
     expect(mine.post).toBe('https://x.com/nibbler_01/status/1888888888888888888');
     expect(typeof mine.postedAt).toBe('number');
+    expect(mine.postVerified).toBe(true);
     expect(list.posted).toBe(1);
-    expect((await post('https://www.x.com/Nibbler_01/status/42')).status).toBe(200);
+    expect(list.verified).toBe(1);
+    expect((await post('https://www.x.com/Nibbler_01/status/42')).body).toEqual({ ok: true, verified: true });
     list = (await h.call('GET', '/api/admin/appetizers', { wallet: h.admin })).body as AppetizerList;
     expect(list.items.find((e) => e.code === code)!.post).toBe('https://x.com/Nibbler_01/status/42');
+    // the complete filter
+    const complete = (await h.call('GET', '/api/admin/appetizers?complete=1', { wallet: h.admin })).body as AppetizerList;
+    expect(complete.items.map((e) => e.code)).toEqual([code]);
+    const open = (await h.call('GET', '/api/admin/appetizers?complete=0', { wallet: h.admin })).body as AppetizerList;
+    expect(open.items.map((e) => e.code)).not.toContain(code);
+    expect(open.items.length).toBe(list.items.length - 1);
     const unknown = await h.call('POST', '/api/appetizer/AAAAAAAAAA/post', { body: { url: 'https://x.com/a/status/1' } });
     expect(unknown.status).toBe(404);
     expect(unknown.body.error).toBe('not_found');
@@ -173,8 +231,8 @@ describe('the Appetizer: claims, post links, the share page and the admin list',
     expect(html).toContain(`<meta property="og:image" content="https://coinnibal.fun/appetizer/${code}.png">`);
     expect(html).toContain(`<meta name="twitter:image" content="https://coinnibal.fun/appetizer/${code}.png">`);
     expect(html).toContain('<meta property="og:image:height" content="675">');
-    expect(html).toContain('<title>Appetizer No. 0001 · @Nibbler_01</title>');
-    expect(html).toContain('Coinnibal: coins eating coins.');
+    expect(html).toContain('<title>Early card · The Appetizer No. 0001 · @Nibbler_01</title>');
+    expect(html).toContain('A Coinnibal early card for early fans.');
     expect(html).toContain('url=https://coinnibal.fun/#appetizer');
     expect(html.toLowerCase()).not.toContain(alice.toLowerCase().slice(2));
     expect((await h.call('GET', '/appetizer/AAAAAAAAAA')).status).toBe(404);
@@ -206,6 +264,9 @@ describe('the Appetizer: claims, post links, the share page and the admin list',
     expect(list.total).toBe(3);
     expect(list.items.map((e) => e.no)).toEqual([3, 2, 1]);
     expect(list.items[2]).toMatchObject({ handle: 'Nibbler_01', wallet: alice });
+    // the follow (and the like, when sent) is stamped with the claim
+    expect(list.items[2]).toMatchObject({ followedAt: list.items[2].at, likedAt: null });
+    expect(list.items[1]).toMatchObject({ handle: 'CoinFan', likedAt: list.items[1].at, post: null, postVerified: false });
     const page = (await h.call('GET', '/api/admin/appetizers?offset=1&limit=1', { wallet: h.admin })).body as AppetizerList;
     expect(page.items.map((e) => e.no)).toEqual([2]);
     expect(page.total).toBe(3);
@@ -222,15 +283,15 @@ describe('the Appetizer: claims, post links, the share page and the admin list',
     expect(r.headers.get('content-type')).toContain('text/csv');
     expect(r.headers.get('content-disposition')).toMatch(/attachment; filename="coinnibal-appetizers-\d{4}-\d{2}-\d{2}\.csv"/);
     const lines = r.text.trim().split('\r\n');
-    expect(lines[0]).toBe('no,handle,wallet,claimed,post,views');
+    expect(lines[0]).toBe('no,handle,wallet,claimed,followed,liked,post,post_verified,complete,views');
     expect(lines).toHaveLength(4);
-    expect(lines[1]).toMatch(new RegExp(`^1,Nibbler_01,${alice},\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z,https://x.com/Nibbler_01/status/42,\\d+$`));
-    expect(lines[2]).toMatch(/^2,CoinFan,0x[0-9a-fA-F]{40},[^,]+,,0$/);
+    expect(lines[1]).toMatch(new RegExp(`^1,Nibbler_01,${alice},(\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z),\\1,,https://x.com/Nibbler_01/status/42,yes,yes,\\d+$`));
+    expect(lines[2]).toMatch(/^2,CoinFan,0x[0-9a-fA-F]{40},([^,]+),\1,\1,,,no,0$/);
   });
 
   it('deletes a card: gone from the list, the page and the image; its number is not handed out again', async () => {
     const code = first.card.code;
-    expect((await h.call('DELETE', `/api/admin/appetizers/${code}`, { wallet: h.admin })).body).toEqual({ ok: true, total: 2, posted: 0 });
+    expect((await h.call('DELETE', `/api/admin/appetizers/${code}`, { wallet: h.admin })).body).toEqual({ ok: true, total: 2, posted: 0, verified: 0 });
     expect((await h.call('DELETE', `/api/admin/appetizers/${code}`, { wallet: h.admin })).status).toBe(404);
     expect((await h.call('GET', `/appetizer/${code}`)).status).toBe(404);
     expect((await h.call('GET', `/appetizer/${code}.png`)).status).toBe(404);
@@ -252,6 +313,44 @@ describe('the Appetizer: claims, post links, the share page and the admin list',
 });
 
 describe('the Appetizer: limits and fallbacks', () => {
+  it('refuses a post X does not show, by someone else, or without the card; keeps it unchecked when X is down', async () => {
+    const h = await harness();
+    const { card } = (await claim(h, testSigner().address, 'Poster_9')).body as AppetizerResponse;
+    const post = (id: string) => h.call('POST', `/api/appetizer/${card.code}/post`, { body: { url: `https://x.com/poster_9/status/${id}` } });
+    const entry = async () => ((await h.call('GET', '/api/admin/appetizers?q=poster_9', { wallet: h.admin })).body as AppetizerList).items[0];
+    // no such post (both endpoints say 404)
+    let r = await post('900');
+    expect(r.status).toBe(422);
+    expect(r.body).toMatchObject({ error: 'post_unverified', field: 'url' });
+    // X says another account wrote it (a renamed handle in the link)
+    fakeX.synd.set('901', tweet('901', 'someone_else', `coinnibal.fun/appetizer/${card.code}`));
+    r = await post('901');
+    expect(r.status).toBe(400);
+    expect(r.body.error).toBe('bad_post');
+    // the post does not carry this card (another card's code does not count either)
+    fakeX.synd.set('902', tweet('902', 'Poster_9', 'gm https://t.co/x0', ['https://coinnibal.fun/appetizer/ZZZZZZZZZZ']));
+    r = await post('902');
+    expect(r.status).toBe(422);
+    expect(r.body.error).toBe('post_unverified');
+    expect((await entry()).post).toBeNull();
+    // X unreachable: kept, unchecked
+    fakeX.synd.set('903', 'throw');
+    fakeX.oembed.set('903', 503);
+    r = await post('903');
+    expect(r.body).toEqual({ ok: true, verified: false });
+    expect(await entry()).toMatchObject({ post: 'https://x.com/poster_9/status/903', postVerified: false });
+    // only oEmbed answers, its link a t.co one: kept, unchecked
+    fakeX.synd.set('904', 500);
+    fakeX.oembed.set('904', { html: '<blockquote><p>my card <a href="https://t.co/abc">https://t.co/abc</a></p>&mdash; Fan <a href="https://twitter.com/Poster_9/status/904">Nov</a></blockquote>', author_url: 'https://twitter.com/Poster_9', author_name: 'Fan' });
+    expect((await post('904')).body).toEqual({ ok: true, verified: false });
+    // the same link again once X answers: checked now
+    fakeX.synd.set('903', tweet('903', 'Poster_9', 'here https://t.co/x0', [`https://coinnibal.fun/appetizer/${card.code}?s=1`]));
+    expect((await post('903')).body).toEqual({ ok: true, verified: true });
+    expect(await entry()).toMatchObject({ post: 'https://x.com/poster_9/status/903', postVerified: true });
+    await h.app.close();
+    rmSync(h.dir, { recursive: true, force: true });
+  });
+
   it('limits claims per IP', async () => {
     const h = await harness({ appetizerIp: new Limiter(2, 60 * 60_000) });
     try {
@@ -301,6 +400,17 @@ describe('the Appetizer: limits and fallbacks', () => {
     expect(out.status).toBe(200);
   });
 
+  it('loads cards stored before the follow was asked with followedAt null (the CSV leaves it empty)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-appetizer-old-'));
+    const file = join(dir, 'appetizers.json');
+    const wallet = testSigner().address;
+    writeFileSync(file, JSON.stringify({ v: 1, next: 2, cards: [{ code: 'OldCard001', no: 1, handle: 'old_fan', at: 1000, wallet, post: null, postedAt: null, views: 3 }] }));
+    const s = new AppetizerService({ path: file, baseUrl: () => '' });
+    expect(s.list().items).toEqual([{ code: 'OldCard001', no: 1, handle: 'old_fan', at: 1000, wallet, post: null, postedAt: null, postVerified: false, followedAt: null, likedAt: null, views: 3 }]);
+    expect(s.csv().trim().split('\r\n')[1]).toBe(`1,old_fan,${wallet},1970-01-01T00:00:01.000Z,,,,,no,3`);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it('a corrupt file is set aside, not fatal', () => {
     const dir = mkdtempSync(join(tmpdir(), 'coinnibal-appetizer-bad-'));
     const file = join(dir, 'appetizers.json');
@@ -310,6 +420,21 @@ describe('the Appetizer: limits and fallbacks', () => {
     expect(s.total).toBe(0);
     expect(logs.join('\n')).toMatch(/unreadable/);
     expect(existsSync(file)).toBe(false);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('the post to like and comment on: the first post by default, a status link, null hides it (kept across a restart)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-appetizer-post-'));
+    mkdirSync(join(dir, 'site'), { recursive: true });
+    // a settings file from before the setting existed: the default
+    writeFileSync(join(dir, SITE_FILES.settings), JSON.stringify({ wlOpen: false, launch: 1, xHandle: 'coinnibalfun' }));
+    const s = new SiteStore(dir);
+    expect(s.settings.appetizerPostUrl).toBe('https://x.com/Coinnibalfun/status/2123416055406354866');
+    expect(() => s.updateSettings({ appetizerPostUrl: 'https://example.com/x' })).toThrow();
+    expect(s.updateSettings({ appetizerPostUrl: 'https://x.com/coinnibalfun/status/7' }).appetizerPostUrl).toBe('https://x.com/coinnibalfun/status/7');
+    expect(new SiteStore(dir).settings.appetizerPostUrl).toBe('https://x.com/coinnibalfun/status/7');
+    expect(s.updateSettings({ appetizerPostUrl: '' }).appetizerPostUrl).toBeNull();
+    expect(new SiteStore(dir).settings.appetizerPostUrl).toBeNull();
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -345,9 +470,16 @@ describe('the Appetizer: input helpers', () => {
     expect(parsePostUrl('https://x.com.evil/a_b/status/1')).toBeNull();
   });
 
+  it('postCarriesCard: the code as a word of its own, in the text or an expanded link', () => {
+    expect(postCarriesCard({ text: 'look coinnibal.fun/appetizer/AbCdEfGhIj', urls: null }, 'AbCdEfGhIj')).toBe(true);
+    expect(postCarriesCard({ text: 'https://t.co/1', urls: ['https://coinnibal.fun/appetizer/AbCdEfGhIj'] }, 'AbCdEfGhIj')).toBe(true);
+    expect(postCarriesCard({ text: 'abcdefghij', urls: [] }, 'AbCdEfGhIj')).toBe(false);
+    expect(postCarriesCard({ text: 'xAbCdEfGhIjx', urls: [] }, 'AbCdEfGhIj')).toBe(false);
+  });
+
   it('the page escapes what it prints', () => {
     const html = appetizerPage({ code: 'AbCdEfGhIj', no: 42, handle: 'a_b', at: 0 }, 'https://coinnibal.fun');
-    expect(html).toContain('Appetizer No. 0042 · @a_b');
+    expect(html).toContain('Early card · The Appetizer No. 0042 · @a_b');
     expect(html).not.toMatch(/<script/i);
   });
 });

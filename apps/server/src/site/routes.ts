@@ -258,6 +258,8 @@ export class SiteApi {
   /** "Link X": the links, the proof check and the account pictures (`/api/x/*`). */
   setXLinks(x: XLinkService | null): void {
     this.xLinks = x;
+    // the Appetizer's post links are read back the same way
+    this.appetizers.setPostReader(x ? (id) => x.readPost(id) : null);
   }
 
   /** `fn()`: flush every store to disk (the backup's consistent snapshot). */
@@ -784,7 +786,7 @@ export class SiteApi {
   }
 
   /**
-   * The Appetizer, open to every visitor (no session): `POST /api/appetizer {wallet, handle}` claims a card (while
+   * The Appetizer, open to every visitor (no session): `POST /api/appetizer {wallet, handle, followed, liked?}` claims a card (while
    * `appetizerOpen` is on), `POST /api/appetizer/<code>/post {url}` records the X post that shared it. Refusals answer
    * `{ error: AppetizerError, message, field? }`.
    */
@@ -1191,16 +1193,18 @@ export class SiteApi {
         return sendCsv(res, `coinnibal-appetizers-${day}.csv`, this.appetizers.csv());
       }
       case 'appetizers': {
-        // the Appetizer cards, newest first: GET the list (`?offset`, `?limit`, `?q` a handle or a wallet), DELETE `<code>`
+        // the Appetizer cards, newest first: GET the list (`?offset`, `?limit`, `?q` a handle or a wallet, `?complete=1|0`
+        // with or without a post link), DELETE `<code>`
         if (seg.length === 1) {
           this.method(req, 'GET');
-          return send(res, 200, this.appetizers.list({ limit: Number(q.get('limit') ?? 100), offset: Number(q.get('offset') ?? 0), q: q.get('q') }));
+          const complete = q.get('complete');
+          return send(res, 200, this.appetizers.list({ limit: Number(q.get('limit') ?? 100), offset: Number(q.get('offset') ?? 0), q: q.get('q'), complete: complete === '1' ? true : complete === '0' ? false : null }));
         }
         if (seg.length !== 2) break;
         this.method(req, 'DELETE');
         const gone = this.appetizers.remove(seg[1]);
         this.ext.log?.(`appetizer: ${wallet} deleted card No. ${gone.no}`);
-        return send(res, 200, { ok: true, total: this.appetizers.total, posted: this.appetizers.posted() });
+        return send(res, 200, { ok: true, total: this.appetizers.total, posted: this.appetizers.posted(), verified: this.appetizers.verified() });
       }
       case 'leaderboards': {
         // the daily and all-time boards: what they hold, and a reset (profiles, XP and levels are not touched)

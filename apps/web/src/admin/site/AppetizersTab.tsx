@@ -11,15 +11,21 @@ const PAGE = 100;
 /** "0042". */
 const no = (n: number) => String(n).padStart(4, '0');
 
+type Filter = 'all' | 'complete' | 'open';
+
 /**
  * Appetizers: the early cards visitors claim on the landing page, newest first: the number, the X handle, the wallet
- * (in full, with a copy button), when it was claimed, the X post that shared it and how often its image was fetched.
- * A search (handle or wallet), the totals, the CSV of every card, and delete (with a confirm).
+ * (in full, with a copy button), when it was claimed, when the visitor said they followed (and liked our X post),
+ * the X post that shared it (checked on X, or kept unchecked when X did not answer) and how often its image was
+ * fetched. A card is complete once its post link is in. A search (handle or wallet), a complete / not yet filter, the
+ * totals, the CSV of every card, and delete (with a confirm).
  */
 export function AppetizersTab({ api, onTotals }: { api: AdminApi; onTotals?: (t: { total: number; posted: number }) => void }) {
   const [items, setItems] = useState<AppetizerEntry[] | null>(null);
   const [total, setTotal] = useState(0);
   const [posted, setPosted] = useState(0);
+  const [verified, setVerified] = useState(0);
+  const [filter, setFilter] = useState<Filter>('all');
   const [more, setMore] = useState(false);
   const [q, setQ] = useState('');
   const [query, setQuery] = useState('');
@@ -33,17 +39,18 @@ export function AppetizersTab({ api, onTotals }: { api: AdminApi; onTotals?: (t:
 
   const load = useCallback(
     (offset = 0) => {
-      api.appetizers.list({ limit: PAGE, offset, q: query }).then(
+      api.appetizers.list({ limit: PAGE, offset, q: query, ...(filter === 'all' ? {} : { complete: filter === 'complete' }) }).then(
         (r) => {
           setItems((old) => (offset > 0 && old ? [...old, ...r.items] : r.items));
           setTotal(r.total);
           setPosted(r.posted);
+          setVerified(r.verified ?? 0);
           setMore(r.items.length === PAGE);
         },
         (e) => setFlash('err', errText(e)),
       );
     },
-    [api, query, setFlash],
+    [api, query, filter, setFlash],
   );
   useEffect(() => load(0), [load]);
   useEffect(() => {
@@ -58,6 +65,7 @@ export function AppetizersTab({ api, onTotals }: { api: AdminApi; onTotals?: (t:
       setItems((list) => list?.filter((x) => x.code !== e.code) ?? null);
       setTotal(r.total);
       setPosted(r.posted);
+      setVerified(r.verified ?? 0);
     } catch (err) {
       setFlash('err', errText(err));
     } finally {
@@ -81,18 +89,29 @@ export function AppetizersTab({ api, onTotals }: { api: AdminApi; onTotals?: (t:
         </h2>
         <div className="ad-actions">
           <span className="ad-note" data-testid="admin-appetizers-totals">
-            {items ? `${total.toLocaleString('en-US')} card${total === 1 ? '' : 's'} · ${posted.toLocaleString('en-US')} posted` : 'Loading…'}
+            {items ? `${total.toLocaleString('en-US')} card${total === 1 ? '' : 's'} · ${posted.toLocaleString('en-US')} complete · ${verified.toLocaleString('en-US')} verified` : 'Loading…'}
           </span>
           <InkButton variant="ghost" size="sm" onClick={() => void csv()}>
             Export CSV
           </InkButton>
         </div>
       </div>
-      <p className="ad-card__lede">The early cards visitors claim on the landing page with a wallet and an X handle. The card shows the handle only; the wallet stays here.</p>
+      <p className="ad-card__lede">
+        The early cards visitors claim on the landing page with a wallet and an X handle, after following on X (and liking our X post, while one is set in Settings): those two are on trust. The card shows the handle only; the wallet stays here. A card is complete once its post link is in; the post is checked on X (by the
+        handle, carrying the card&apos;s link), or kept unverified when X did not answer: check those by hand.
+      </p>
       <div className="ad-filters">
         <label className="ad-search">
           <span className="kb-sr">Search</span>
           <input className="st-input" type="search" placeholder="Search handle or wallet" value={q} onChange={(e) => setQ(e.target.value)} />
+        </label>
+        <label>
+          <span className="kb-sr">Show</span>
+          <select className="st-input" value={filter} onChange={(e) => setFilter(e.target.value as Filter)} data-testid="admin-appetizers-filter">
+            <option value="all">All cards</option>
+            <option value="complete">Complete (posted)</option>
+            <option value="open">Not posted yet</option>
+          </select>
         </label>
       </div>
       {flash}
@@ -100,7 +119,7 @@ export function AppetizersTab({ api, onTotals }: { api: AdminApi; onTotals?: (t:
         <StampSpinner label="Loading" />
       ) : items.length === 0 ? (
         <Empty scene="queue" mood="sleepy">
-          {query ? `No card matching “${query}”.` : 'No cards yet. They arrive here when visitors claim one on the landing page.'}
+          {query || filter !== 'all' ? `No card matching${query ? ` “${query}”` : ' this filter'}.` : 'No cards yet. They arrive here when visitors claim one on the landing page.'}
         </Empty>
       ) : (
         <div className="ad-tablewrap">
@@ -111,7 +130,10 @@ export function AppetizersTab({ api, onTotals }: { api: AdminApi; onTotals?: (t:
                 <th scope="col">Handle</th>
                 <th scope="col">Wallet</th>
                 <th scope="col">Claimed</th>
+                <th scope="col">Followed</th>
+                <th scope="col">Liked</th>
                 <th scope="col">Post</th>
+                <th scope="col">Verified</th>
                 <th scope="col">Views</th>
                 <th scope="col">
                   <span className="kb-sr">Delete</span>
@@ -129,7 +151,10 @@ export function AppetizersTab({ api, onTotals }: { api: AdminApi; onTotals?: (t:
                     <code className="ad-wallet">{e.wallet}</code> <CopyButton value={e.wallet} label="Copy wallet" />
                   </td>
                   <td className="num ad-date">{fmtDate(e.at)}</td>
+                  <td className="num ad-date">{e.followedAt === null ? '—' : fmtDate(e.followedAt)}</td>
+                  <td className="num ad-date">{e.likedAt === null ? '—' : fmtDate(e.likedAt)}</td>
                   <td>{e.post ? <Ext href={e.post}>Post</Ext> : '—'}</td>
+                  <td>{e.post ? e.postVerified ? '✓ verified' : 'unverified' : '—'}</td>
                   <td className="num">{e.views.toLocaleString('en-US')}</td>
                   <td>
                     <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => void remove(e)}>
