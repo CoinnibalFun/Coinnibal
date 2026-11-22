@@ -7,6 +7,7 @@ import {
   normalizeXHandle,
   type CollabApplyRequest,
   type CollabWalletRow,
+  type AppetizerError,
   type SiteErrorCode,
   type WlTaskKind,
 } from '@coinnibal/shared';
@@ -16,7 +17,7 @@ import { checksumAddress } from '../auth';
 export class SiteFail extends Error {
   constructor(
     readonly status: number,
-    readonly code: SiteErrorCode,
+    readonly code: SiteErrorCode | AppetizerError,
     message: string,
     readonly field?: string,
   ) {
