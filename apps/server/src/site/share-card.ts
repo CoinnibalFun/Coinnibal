@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
-import { drawRisoCoin, lookForBasicSkin } from '@coinnibal/art';
-import { BRAND_NAME, SHARE_IMAGE, SITE_HOST_DEFAULT, eatenLine, ordinal, shareName, xMention, type ShareBoardRow, type ShareCard } from '@coinnibal/shared';
+import { drawAppetizerCard, drawRisoCoin, lookForBasicSkin } from '@coinnibal/art';
+import { APPETIZER_IMAGE, BRAND_NAME, SHARE_IMAGE, SITE_HOST_DEFAULT, eatenLine, ordinal, shareName, xMention, type AppetizerCard, type ShareBoardRow, type ShareCard } from '@coinnibal/shared';
 import type { SKRSContext2D } from '@napi-rs/canvas';
 
 type Canvas = typeof import('@napi-rs/canvas');
@@ -70,7 +70,16 @@ function fonts(): void {
   const { GlobalFonts } = canvasModule()!;
   GlobalFonts.registerFromPath(require.resolve('@fontsource-variable/fraunces/files/fraunces-latin-wght-normal.woff2'), 'Fraunces');
   GlobalFonts.registerFromPath(require.resolve('@fontsource-variable/dm-sans/files/dm-sans-latin-wght-normal.woff2'), 'DM Sans');
+  // the Appetizer card's numbers: Geist Mono when it is installed, else DM Sans
+  try {
+    if (GlobalFonts.registerFromPath(require.resolve('@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2'), 'Geist Mono')) monoFamily = 'Geist Mono';
+  } catch {
+    /* not installed: DM Sans */
+  }
 }
+
+/** The monospace family the Appetizer card is drawn with (`fonts` registers it). */
+let monoFamily = 'DM Sans';
 
 /** The eaten coin of a kill card: its linked `@handle`, else its cleaned name, with its BOT tag (test arenas). */
 const victimOf = (c: ShareCard) => (!c.victimBot && xMention(c.victimX)) || (c.victim ? `${shareName(c.victim)}${c.victimBot ? ' (BOT)' : ''}` : null);
@@ -412,4 +421,19 @@ function boardRow(ctx: SKRSContext2D, r: ShareBoardRow, x: number, y: number, w:
   };
   if (r.bot) tag('BOT', INK, CREAM);
   if (r.you) tag('YOU', TEAL, '#FFFFFF');
+}
+
+/**
+ * An Appetizer card (`APPETIZER_IMAGE`, 1200 x 675 PNG): `drawAppetizerCard` of `@coinnibal/art` on @napi-rs/canvas,
+ * with the server's fonts. It carries the handle and the number only, never the wallet. Throws when the canvas cannot
+ * load (see `shareCardSelfCheck`).
+ */
+export function renderAppetizerCard(c: Pick<AppetizerCard, 'no' | 'handle' | 'at'>, site: string = SITE_HOST_DEFAULT): Buffer {
+  const lib = canvasModule();
+  if (!lib) throw new Error(`@napi-rs/canvas is not available: ${canvasError}`);
+  fonts();
+  const canvas = lib.createCanvas(APPETIZER_IMAGE.width, APPETIZER_IMAGE.height);
+  const ctx = canvas.getContext('2d');
+  drawAppetizerCard(ctx as unknown as CanvasRenderingContext2D, { no: c.no, handle: c.handle, at: c.at, host: site }, { display: 'Fraunces', body: 'DM Sans', mono: monoFamily });
+  return canvas.toBuffer('image/png');
 }

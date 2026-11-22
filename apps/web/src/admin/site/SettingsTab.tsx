@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Field, InkButton, StampSpinner } from '../../design';
 import { errText, useFlash, type TabProps } from './common';
 
-const DOORS = ['mintOpen', 'wlOpen', 'collabOpen'] as const;
+const DOORS = ['mintOpen', 'wlOpen', 'collabOpen', 'appetizerOpen'] as const;
 type Door = (typeof DOORS)[number];
 
 export const GAME_ACCESS_LABEL: Record<GameAccess, { label: string; note: string }> = {
@@ -13,7 +13,7 @@ export const GAME_ACCESS_LABEL: Record<GameAccess, { label: string; note: string
   maintenance: { label: 'Maintenance', note: 'Only admins can play. The Play link stays; /play says the game is paused and back soon.' },
 };
 
-/** Site switches: what visitors can see (the game, the mint page, WL and collab applications) and the X handle. */
+/** Site switches: what visitors can see (the game, the mint page, WL and collab applications, Appetizer cards) and the X handle. */
 export function SettingsTab({ api, onSiteChange }: TabProps) {
   const [saved, setSaved] = useState<SiteSettings | null>(null);
   const [draft, setDraft] = useState<SiteSettings | null>(null);
@@ -105,6 +105,7 @@ export function SettingsTab({ api, onSiteChange }: TabProps) {
       {switchRow('mintOpen', 'Mint page open', 'On: visitors see /mint and the Mint links. Off: /mint says “not open yet”. This does not change the mint phase on the chain (Mint tab).')}
       {switchRow('wlOpen', 'WL applications open', 'On: visitors can apply on /wl. Off: no new entries; someone who applied before can still sign in on /wl to see their status. The WL tab keeps working.')}
       {switchRow('collabOpen', 'Collab applications open', 'On: communities can apply on /collab. Off: /collab says “not open yet”. The Collabs tab keeps working.')}
+      {switchRow('appetizerOpen', 'Appetizer cards open', 'On: visitors can claim an early card on the landing page. Off: no new cards; cards already out keep their pages. The Appetizers drawer keeps working.')}
       <h3 className="ad-h3">X account</h3>
       <Field
         label="X handle"

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { AdminAudit } from './audit';
 import { OLD_SECRET_PROOF_HEADER, SECRET_PROOF_HEADER, SECRET_PURPOSES, SecretProofError, SecretProofs, type SecretPurpose, type SecretRoute } from './secret-proof';
 
-import { FEEDBACK_LIMITS, ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL, siteHostOf, gameVisible, isOpenPlayOrigin, isTestChainId } from '@coinnibal/shared';
+import { APPETIZER_LIMITS, FEEDBACK_LIMITS, ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type AppetizerError, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL, siteHostOf, gameVisible, isOpenPlayOrigin, isTestChainId } from '@coinnibal/shared';
 import { SIGN_IN_BUSY_MESSAGE, SignInBusyError, checksumAddress, type Auth } from '../auth';
 import { AvatarError, avatarIdOf, sanitizeAvatar, type AvatarStore } from '../avatars';
 import { XLinkFail, type XLinkService } from '../xlink';
@@ -40,6 +40,7 @@ import { parseArtStyle } from './nft/render';
 import type { SiteStore } from './store';
 import { SiteFail, obj } from './validate';
 import { FeedbackStore, parseFeedback } from './feedback';
+import { AppetizerService } from './appetizer';
 
 /** A request's or a socket's `Origin` header (absent on a same-origin GET and on a server's own call). */
 type Origin = string | string[] | null | undefined;
@@ -94,6 +95,10 @@ export interface SiteLimits {
   feedbackWallet?: Limiter;
   /** Messages stored server-wide (default 300 in 10 minutes): a flood from many addresses cannot churn the kept 5,000 in minutes. */
   feedbackAll?: Limiter;
+  /** `POST /api/appetizer` per client (default `APPETIZER_LIMITS.perIpHour` an hour). */
+  appetizerIp?: Limiter;
+  /** `POST /api/appetizer/<code>/post` per client (default 30 an hour). */
+  appetizerPostIp?: Limiter;
 }
 
 export const defaultSiteLimits = (): SiteLimits => ({
@@ -111,7 +116,7 @@ const send = (res: ServerResponse, status: number, body: unknown) => {
   res.end(JSON.stringify(body));
 };
 
-const fail = (res: ServerResponse, status: number, error: SiteError) => send(res, status, error);
+const fail = (res: ServerResponse, status: number, error: Omit<SiteError, 'error'> & { error: SiteError['error'] | AppetizerError }) => send(res, status, error);
 
 const sendCsv = (res: ServerResponse, name: string, body: string) => {
   res.writeHead(200, {
@@ -224,6 +229,13 @@ export class SiteApi {
       feedbackWallet: limits.feedbackWallet ?? new Limiter(5, 10 * 60_000),
       feedbackAll: limits.feedbackAll ?? new Limiter(300, 10 * 60_000),
     };
+    this.appetizers = new AppetizerService({
+      path: ext.dataDir ? join(ext.dataDir, 'site', 'appetizers.json') : null,
+      baseUrl: (req) => this.baseUrl(req),
+      claimIp: limits.appetizerIp ?? new Limiter(APPETIZER_LIMITS.perIpHour, 60 * 60_000),
+      postIp: limits.appetizerPostIp,
+      log: ext.log,
+    });
     this.proofs = new SecretProofs((w, m, sig) => this.auth.signedBy(w, m, sig));
   }
 
@@ -232,6 +244,9 @@ export class SiteApi {
 
   /** Player feedback (`POST /api/feedback`, `DATA_DIR/site/feedback.jsonl`, the admin's Feedback drawer). */
   readonly feedback: FeedbackStore;
+
+  /** The Appetizer cards (`/api/appetizer`, `/appetizer/<code>`, `DATA_DIR/site/appetizers.json`, the admin's Appetizers drawer). */
+  readonly appetizers: AppetizerService;
 
   /** `fn(wallet)`: the wallet's picture was removed or replaced (the rooms take it off live coins). */
   onAvatarChange(fn: ((wallet: string) => void) | null): void {
@@ -388,7 +403,9 @@ export class SiteApi {
       path === '/api/shop/buy' ||
       path === '/api/x' ||
       path.startsWith('/api/x/') ||
-      path === '/api/feedback';
+      path === '/api/feedback' ||
+      path === '/api/appetizer' ||
+      path.startsWith('/api/appetizer/');
     if (!mine) return false;
     try {
       if (path === '/api/auth/login' || path === '/api/auth/me') await this.authRoutes(req, res, path, ip);
@@ -401,6 +418,7 @@ export class SiteApi {
       else if (path.startsWith('/api/site/')) await this.siteRoutes(req, res, url, ip);
       else if (path.startsWith('/api/rooms/custom')) await this.customRoutes(req, res, path, ip);
       else if (path === '/api/feedback') await this.feedbackRoute(req, res, ip);
+      else if (path === '/api/appetizer' || path.startsWith('/api/appetizer/')) await this.appetizerRoutes(req, res, path, ip);
       else await this.audited(req, res, url, auditIp);
     } catch (err) {
       if (err instanceof SiteFail && err.status === 413) res.setHeader('Connection', 'close');
@@ -761,6 +779,23 @@ export class SiteApi {
     if (!lim.feedbackAll.allow('all')) throw new SiteFail(429, 'rate_limited', 'Many messages are arriving right now. Try again in a few minutes.');
     this.feedback.add(input, wallet);
     return send(res, 201, { ok: true });
+  }
+
+  /**
+   * The Appetizer, open to every visitor (no session): `POST /api/appetizer {wallet, handle}` claims a card (while
+   * `appetizerOpen` is on), `POST /api/appetizer/<code>/post {url}` records the X post that shared it. Refusals answer
+   * `{ error: AppetizerError, message, field? }`.
+   */
+  private async appetizerRoutes(req: IncomingMessage, res: ServerResponse, path: string, ip: string): Promise<void> {
+    const read = (r: IncomingMessage, limit: number) => readJson(r, limit);
+    if (path === '/api/appetizer') {
+      this.method(req, 'POST');
+      return this.appetizers.claimRoute(req, res, ip, this.store.settings.appetizerOpen, read, send);
+    }
+    const m = /^\/api\/appetizer\/([^/]+)\/post$/.exec(path);
+    if (!m) throw new SiteFail(404, 'not_found', 'Not found');
+    this.method(req, 'POST');
+    return this.appetizers.postRoute(req, res, m[1], ip, read, send);
   }
 
   /** Rate limits a write: per IP before the session is known, then per wallet. */
@@ -1135,6 +1170,23 @@ export class SiteApi {
         const read = (await readJson(req)).read;
         if (typeof read !== 'boolean') throw new SiteFail(400, 'bad_request', 'read must be true or false', 'read');
         return send(res, 200, { entry: fb.setRead(seg[1], read), unread: fb.unread() });
+      }
+      case 'appetizers.csv': {
+        if (seg.length !== 1) break;
+        this.method(req, 'GET');
+        return sendCsv(res, `coinnibal-appetizers-${day}.csv`, this.appetizers.csv());
+      }
+      case 'appetizers': {
+        // the Appetizer cards, newest first: GET the list (`?offset`, `?limit`, `?q` a handle or a wallet), DELETE `<code>`
+        if (seg.length === 1) {
+          this.method(req, 'GET');
+          return send(res, 200, this.appetizers.list({ limit: Number(q.get('limit') ?? 100), offset: Number(q.get('offset') ?? 0), q: q.get('q') }));
+        }
+        if (seg.length !== 2) break;
+        this.method(req, 'DELETE');
+        const gone = this.appetizers.remove(seg[1]);
+        this.ext.log?.(`appetizer: ${wallet} deleted card No. ${gone.no}`);
+        return send(res, 200, { ok: true, total: this.appetizers.total, posted: this.appetizers.posted() });
       }
       case 'leaderboards': {
         // the daily and all-time boards: what they hold, and a reset (profiles, XP and levels are not touched)
