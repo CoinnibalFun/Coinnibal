@@ -6,7 +6,8 @@
  * Routes:
  * - `POST /api/appetizer` (`AppetizerRequest`) → `AppetizerResponse`. 403 `closed` while `SiteSettings.appetizerOpen`
  *   is off; 400 `bad_wallet` / `bad_handle`; 409 `handle_taken` (the handle already holds a card for another wallet);
- *   429 when an IP sends too many. The same wallet again returns its card (`existing: true`; the handle stays).
+ *   429 when an IP sends too many. The same wallet with the same handle returns its card
+ *   (`existing: true`); with another handle, 409 `wallet_taken` (a wallet alone never reveals its handle).
  * - `POST /api/appetizer/<code>/post` (`AppetizerPostRequest`) → `{ ok: true }`: the link of the X post that shared
  *   the card (its author must be the card's handle); 400 `bad_post`.
  * - `GET /appetizer/<code>`: the share page (Open Graph / Twitter `summary_large_image` tags, the card as its image)
@@ -34,7 +35,7 @@ export const APPETIZER_IMAGE = { width: 1200, height: 675 } as const;
 /** A card's code: its share link (`/appetizer/<code>`). */
 export const APPETIZER_CODE_RE = /^[A-Za-z0-9]{10}$/;
 
-export type AppetizerError = 'closed' | 'bad_wallet' | 'bad_handle' | 'handle_taken' | 'bad_post' | 'not_found' | 'rate_limited';
+export type AppetizerError = 'closed' | 'bad_wallet' | 'bad_handle' | 'handle_taken' | 'wallet_taken' | 'bad_post' | 'not_found' | 'rate_limited';
 
 /** `POST /api/appetizer`. */
 export interface AppetizerRequest {

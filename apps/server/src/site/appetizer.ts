@@ -203,12 +203,17 @@ export class AppetizerService {
   // ---------- the visitor's side ----------
 
   /**
-   * A claim (`wallet` EIP-55, `handle` as typed): the wallet's own card again (`existing`), a 409 `handle_taken` when
-   * another wallet holds the handle, else a new card with the next number.
+   * A claim (`wallet` EIP-55, `handle` as typed): the wallet's own card again (`existing`) when the handle is the
+   * card's too, a 409 `wallet_taken` when the wallet holds a card under another handle (never naming that handle: a
+   * wallet alone must not reveal who holds it), a 409 `handle_taken` when another wallet holds the handle, else a new
+   * card with the next number.
    */
   claim(wallet: string, handle: string): AppetizerResponse {
     const mine = this.byWallet.get(wallet.toLowerCase());
-    if (mine) return { card: publicCard(mine), existing: true };
+    if (mine) {
+      if (mine.handle.toLowerCase() !== handle.toLowerCase()) throw new SiteFail(409, 'wallet_taken', 'This wallet already has its card, under another X handle.', 'wallet');
+      return { card: publicCard(mine), existing: true };
+    }
     if (this.byHandle.has(handle.toLowerCase())) throw new SiteFail(409, 'handle_taken', 'This X handle already has its card.', 'handle');
     if (this.cards.length >= this.kept) throw new SiteFail(403, 'closed', 'Every card has been handed out.');
     const e: AppetizerEntry = { code: this.newCode(), no: this.next++, handle, at: this.now(), wallet, post: null, postedAt: null, views: 0 };
