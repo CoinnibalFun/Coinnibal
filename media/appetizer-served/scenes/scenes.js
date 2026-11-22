@@ -2,7 +2,7 @@
  *
  * The X launch film for The Appetizer, the free early card of coinnibal.fun. One table, a teal gingham cloth:
  *   0.0  ORDER UP      a brass service bell pops onto the table and rings twice (0.5, 0.75): DING!; a menu slip
- *                      drops in: "Now serving / The Appetizer / Your early Coinnibal card".
+ *                      drops in: "Now serving · Early cards / The Appetizer / Your Coinnibal early card".
  *   2.0  THE DEAL      the cards are dealt onto the table, one after another, each with its own guest and coin:
  *                      No. 0001 @coinnibalfun (2.0), 0002 @nibble_queen (2.75), 0003 @coin_chef (3.5), then faster
  *                      and faster (quarters from 4.0, eighths from 5.0) until the table is a pile of orders;
@@ -11,7 +11,7 @@
  *                      under a silver cloche. The cloche rattles and lifts (7.0): the coin in its napkin looks up,
  *                      blinks, grins; the SERVED stamp thumps onto the card (8.0).
  *   9.5  END CARD      the card steps aside; the menu panel: wordmark, "Appetizers are served.",
- *                      "Grab yours at <SITE_HOST>", @coinnibalfun.
+ *                      "Follow @coinnibalfun", "Grab your early card at <SITE_HOST>".
  *
  * Every card is the real one: drawAppetizerCard of packages/art (bundled by ../build-art.mjs), with the card's own
  * Fraunces cut. The dealt cards are drawn once into bitmaps; the hero card is drawn as vectors every frame (a
@@ -298,7 +298,7 @@ window.SITE_HOST = QS.get('site') || 'coinnibal.fun';
     ctx.strokeStyle = TEAL_INK; ctx.lineWidth = 2.5;
     rrect(ctx, 20, 20, w - 40, h - 40, 10); ctx.stroke();
     ctx.lineWidth = 1.5; rrect(ctx, 28, 28, w - 56, h - 56, 6); ctx.stroke();
-    caps(ctx, 'Coinnibal kitchen · Now serving', w / 2, h * 0.2, Math.round(w * 0.026), TEAL_INK);
+    caps(ctx, 'Now serving · Early cards', w / 2, h * 0.2, Math.round(w * 0.028), TEAL_INK, 'center', 700);
     const ts = fitCard(ctx, 'The Appetizer', Math.round(w * 0.135), w - 150);
     ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
     ctx.fillText('The Appetizer', w / 2, h * 0.2 + ts * 1.1);
@@ -310,7 +310,7 @@ window.SITE_HOST = QS.get('site') || 'coinnibal.fun';
     ctx.fillStyle = C.sun; ctx.fill(); ctx.stroke();
     cardFont(ctx, Math.round(w * 0.048), 700);
     ctx.fillStyle = TEAL_INK; ctx.textAlign = 'center';
-    ctx.fillText('Your early Coinnibal card', w / 2, h * 0.84);
+    ctx.fillText('Your Coinnibal early card', w / 2, h * 0.84);
     ctx.restore();
     tape(ctx, x - w * 0.42, lerp(-h, y, e) - h * 0.5, 150, 40, -0.6, prog(t, 0.82, 0.95));
     tape(ctx, x + w * 0.42, lerp(-h, y, e) - h * 0.5, 150, 40, 0.55, prog(t, 0.86, 0.99));
@@ -597,12 +597,13 @@ window.SITE_HOST = QS.get('site') || 'coinnibal.fun';
     const step = (a) => E.outCubic(prog(t, END - 0.2 + a, END + 0.15 + a));
     const rise = (a) => (1 - step(a)) * 26;
     const item = (a, fn) => { const s = step(a); if (s <= 0) return; ctx.save(); ctx.globalAlpha = s; ctx.translate(0, rise(a)); fn(); ctx.restore(); };
-    // per shape: [wordmark y, wordmark h, headline lines, headline size, headline y, rule y, "grab" y, host y, host size, handle y]
+    // per shape: wordmark y and h, the headline (lines, size, y), the rule, "Follow @coinnibalfun" (y, size), "Grab your
+    // early card at" (y, size), the host (y, size); the square puts the wordmark and the follow in its foot row (`frow`)
     const L = MODE === 'landscape'
-      ? { wy: 70, wh: 92, lines: ['Appetizers', 'are served.'], hs: 106, hy: 300, ry: 470, gy: 560, gs: 46, uy: 655, us: 88, ay: 780, as: 28 }
+      ? { wy: 84, wh: 86, lines: ['Appetizers', 'are served.'], hs: 104, hy: 295, ry: 445, fy: 535, fs: 42, gy: 670, gs: 40, uy: 768, us: 84 }
       : MODE === 'square'
-        ? { wy: null, lines: ['Appetizers are served.'], hs: 76, hy: 105, ry: 160, gy: 225, gs: 40, uy: 300, us: 72, ay: 385, as: 24, wrow: true }
-        : { wy: null, lines: ['Appetizers', 'are served.'], hs: 116, hy: 150, ry: 330, gy: 420, gs: 52, uy: 520, us: 96, ay: 660, as: 32 };
+        ? { wy: null, lines: ['Appetizers are served.'], hs: 76, hy: 100, ry: 150, gy: 215, gs: 38, uy: 295, us: 70, fy: 385, fs: 32, frow: true }
+        : { wy: null, lines: ['Appetizers', 'are served.'], hs: 116, hy: 160, ry: 330, fy: 428, fs: 54, gy: 565, gs: 46, uy: 665, us: 96 };
     if (L.wy != null) item(-0.05, () => wordmark(ctx, cx, L.wy, L.wh, { center: true }));
     item(0.0, () => {
       ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
@@ -618,7 +619,7 @@ window.SITE_HOST = QS.get('site') || 'coinnibal.fun';
     item(0.35, () => {
       cardFont(ctx, L.gs, 700);
       ctx.fillStyle = TEAL_INK; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-      ctx.fillText('Grab yours at', cx, L.gy);
+      ctx.fillText('Grab your early card at', cx, L.gy);
     });
     item(0.45, () => {
       const s = fitCard(ctx, window.SITE_HOST, L.us, pw - 110);
@@ -637,17 +638,36 @@ window.SITE_HOST = QS.get('site') || 'coinnibal.fun';
       ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
       ctx.fillText(window.SITE_HOST, cx, L.uy);
     });
-    item(0.7, () => {
-      if (L.wrow) {
-        // square: the wordmark and the handle share the foot row
-        const m = wordmark(ctx, 60, L.ay - 30, 58, {});
-        caps(ctx, '@coinnibalfun', pw - 60, L.ay, L.as, TEAL_INK, 'right', 600, 0.08);
-        return m;
-      }
-      caps(ctx, '@coinnibalfun', cx, L.ay, L.as, TEAL_INK, 'center', 600, 0.08);
-    });
+    if (L.frow) {
+      // square: the wordmark and the follow share the foot row
+      item(0.7, () => {
+        wordmark(ctx, 60, L.fy - 30, 58, {});
+        follow(ctx, pw - 60, L.fy, L.fs, 'right');
+      });
+    } else item(0.25, () => follow(ctx, cx, L.fy, L.fs, 'center'));
     ctx.restore();
   }
+  /** "Follow @coinnibalfun": X's mark and the words, the handle in ink, at (x, baseline y). */
+  function follow(ctx, x, y, size, align) {
+    cardFont(ctx, size, 800);
+    const a = 'Follow ', b = '@coinnibalfun';
+    const wa = ctx.measureText(a).width, wb = ctx.measureText(b).width;
+    const mark = size * 0.8, gap = size * 0.32;
+    const w = mark + gap + wa + wb;
+    let x0 = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
+    // X's mark (its 24-unit path), sitting on the cap height
+    ctx.save();
+    ctx.translate(x0, y - size * 0.72);
+    ctx.scale(mark / 24, mark / 24);
+    ctx.fillStyle = INK;
+    ctx.fill(new Path2D('M17.8 3h3.1l-6.8 7.8 8 10.2h-6.3l-4.9-6.4L5.3 21H2.2l7.3-8.3L1.8 3h6.4l4.4 5.9zm-1.1 16.2h1.7L7.4 4.7H5.6z'));
+    ctx.restore();
+    x0 += mark + gap;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = TEAL_INK; ctx.fillText(a, x0, y);
+    ctx.fillStyle = INK; ctx.fillText(b, x0 + wa, y);
+  }
+
   /** Portrait: the wordmark sits above the card on the end card. */
   function topMark(ctx, t) {
     if (MODE !== 'portrait') return;
@@ -678,7 +698,7 @@ window.SITE_HOST = QS.get('site') || 'coinnibal.fun';
     dealt(ctx, t);
     caption(ctx, t);
     hero(ctx, t);
-    caption(ctx, t, 'Your table is ready', LAY.heroCap, HERO_LAND - 0.05, OUTRO - 0.15);
+    caption(ctx, t, 'Your early card is ready', LAY.heroCap, HERO_LAND - 0.05, OUTRO - 0.15);
     endCard(ctx, t);
     topMark(ctx, t);
     // a short fade in from ink and out at the very end
