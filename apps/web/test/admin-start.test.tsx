@@ -353,7 +353,7 @@ describe('the start screen', () => {
     ...over,
   });
 
-  it('six short status lines: network, contracts, game, mint, feedback, WL and collabs', () => {
+  it('short status lines: network, contracts, game, mint, feedback, WL and collabs, appetizers', () => {
     const rows = startRows(input());
     expect(rows.map((r) => [r.label, r.value])).toEqual([
       ['Network', 'Robinhood Chain Testnet (46630)'],
@@ -362,10 +362,11 @@ describe('the start screen', () => {
       ['Mint', 'No NFT yet.'],
       ['Feedback', '3 new.'],
       ['WL & collabs', 'Sign in to see.'],
+      ['Appetizers', 'Not on this server yet.'],
     ]);
-    expect(startRows(input({ fresh: false, deployLeft: 0, access: 'public', feedback: 0 })).map((r) => r.value)).toEqual(['Robinhood Chain Testnet (46630)', 'Live and signed for the site.', 'Open to everyone.', 'No NFT yet.', 'Nothing new.', 'Sign in to see.']);
+    expect(startRows(input({ fresh: false, deployLeft: 0, access: 'public', feedback: 0 })).map((r) => r.value)).toEqual(['Robinhood Chain Testnet (46630)', 'Live and signed for the site.', 'Open to everyone.', 'No NFT yet.', 'Nothing new.', 'Sign in to see.', 'Not on this server yet.']);
     expect(startRows(input({ feedback: undefined }))[4].value).toBe('Not on this server yet.');
-    expect(startRows(input({ access: null, feedback: null })).slice(2).map((r) => r.value)).toEqual(['Sign in to see.', 'No NFT yet.', 'Sign in to see.', 'Sign in to see.']);
+    expect(startRows(input({ access: null, feedback: null, appetizers: null })).slice(2).map((r) => r.value)).toEqual(['Sign in to see.', 'No NFT yet.', 'Sign in to see.', 'Sign in to see.', 'Sign in to see.']);
     const open = startRows(input({ community: { wlOpen: true, collabOpen: false, wlWaiting: 4, collabWaiting: 1 } }))[5];
     expect(open).toMatchObject({ value: 'WL open · 4 waiting. Collabs closed · 1 waiting.', tone: 'todo' });
     expect(startRows(input({ community: { wlOpen: true, collabOpen: true, wlWaiting: 0, collabWaiting: 0 } }))[5].tone).toBe('ok');
@@ -410,7 +411,7 @@ describe('the start screen', () => {
     const go = vi.fn();
     const net = resolveNetwork(chainStatus({ arenaAddress: null, nftAddress: null }));
     ui(<StartScreen ctx={{ net, status: null, refresh: vi.fn(async () => {}), reloadNet: vi.fn(async () => {}), me: ALICE, walletChainId: 46630, client: null, api: null, open: vi.fn() }} go={go} token={null} access={null} />);
-    expect(within(screen.getByTestId('start-status')).getAllByRole('definition')).toHaveLength(6);
+    expect(within(screen.getByTestId('start-status')).getAllByRole('definition')).toHaveLength(7);
     const buttons = within(screen.getByTestId('start-actions')).getAllByRole('button');
     expect(buttons.map((b) => b.getAttribute('data-go'))).toEqual(['deploy', 'open', 'minting', 'feedback', 'community', 'settings']);
     act(() => buttons[4].click());

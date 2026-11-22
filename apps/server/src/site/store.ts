@@ -257,6 +257,7 @@ export class SiteStore {
       this.settingsV = {
         wlOpen: typeof settings.wlOpen === 'boolean' ? settings.wlOpen : d.wlOpen,
         collabOpen: typeof settings.collabOpen === 'boolean' ? settings.collabOpen : d.collabOpen,
+        appetizerOpen: typeof settings.appetizerOpen === 'boolean' ? settings.appetizerOpen : d.appetizerOpen,
         mintOpen: typeof settings.mintOpen === 'boolean' ? settings.mintOpen : d.mintOpen,
         gameAccess: isGameAccess(settings.gameAccess) ? settings.gameAccess : d.gameAccess,
         xHandle: handle && !previous ? handle : d.xHandle,
@@ -323,6 +324,7 @@ export class SiteStore {
       switch (key) {
         case 'wlOpen':
         case 'collabOpen':
+        case 'appetizerOpen':
         case 'mintOpen':
           next[key] = v.bool(body[key], key);
           break;

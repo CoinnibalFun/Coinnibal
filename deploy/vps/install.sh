@@ -10,14 +10,16 @@
 #       one per line (the token, then the proof; /admin -> Network -> Backup & move copies the command with both).
 # Options: --domain D, --repo SSH_URL, --branch B, --set KEY=VALUE (a .env setting; repeatable; it wins over a setting
 #          --from copies),
-#          --yes (no questions; defaults or the given values; the secrets of --from are still asked when not piped in).
+#          --yes (no questions; defaults or the given values; the secrets of --from are still asked when not piped in;
+#          a deploy key GitHub does not know yet is still shown, and the installer waits at the terminal for it).
 # Safe to run again: every step checks what is already done. Full guide: deploy/vps/README.md.
 set -euo pipefail
 
 # the live server's game domain: a record under elymum.io, kept from before the rename (its DNS record and certificate
 # exist; game.coinnibal.fun needs a new A record first, README "DNS")
 DOMAIN_DEFAULT="game.elymum.io"
-REPO_DEFAULT="https://github.com/furkan3152/Solagel.git"  # public repo: no deploy key needed (an SSH URL still works for a private one)
+# a private repository: the SSH URL, read with the deploy key below (an https:// URL cannot clone it without a token)
+REPO_DEFAULT="git@github.com:furkan3152/Solagel.git"
 BRANCH_DEFAULT="main"
 # The live server's installed names, kept from before the rename (Elymum, November 2026); changing them moves the
 # data. The same literals as deploy/vps/lib.sh (this file runs before the checkout exists; it sources lib.sh after),
@@ -71,7 +73,7 @@ while [[ $# -gt 0 ]]; do
     --token | --proof) die "$1 is not taken on the command line (any local user can read it in ps): leave it out and paste the value at the prompt, or send the token and the proof on stdin, one per line (see --help)" ;;
     --set) [[ "${2:-}" =~ ^[A-Z][A-Z0-9_]*=[^[:space:]]*$ ]] || die "--set needs KEY=VALUE (no spaces)"; sets+=("$2"); shift 2 ;;
     --yes | -y) yes=1; shift ;;
-    -h | --help) sed -n '2,13p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,14p' "$0"; exit 0 ;;
     *) die "unknown argument: $1 (see --help)" ;;
   esac
 done
@@ -262,8 +264,12 @@ if ! ssh-keygen -F github.com >/dev/null 2>&1; then
   rm -f "$scan"
 fi
 repo_path="$(sed -E 's#^(git@github\.com:|ssh://git@github\.com/|https://github\.com/)##; s#\.git$##' <<<"$repo")"
+# an https:// URL of a private repository fails here instead of waiting at a hidden username prompt
+export GIT_TERMINAL_PROMPT=0
 until git ls-remote --exit-code "$repo" "refs/heads/$branch" >/dev/null 2>&1; do
-  [[ "$yes" -eq 0 ]] || die "the deploy key cannot read $repo (branch $branch). Add it on GitHub and run again"
+  # someone has to add the key on GitHub: the wait reads the terminal, also with --yes (the new-server command of
+  # /admin sends the secrets on stdin, so it needs --yes); with no terminal at all it stops
+  { : </dev/tty; } 2>/dev/null || die "the deploy key cannot read $repo (branch $branch). Add $KEY.pub on GitHub (https://github.com/$repo_path/settings/keys, read-only) and run again"
   echo
   echo "------------------------------------------------------------------------------"
   echo " This server needs read access to the repository. Add this deploy key:"
@@ -276,7 +282,7 @@ until git ls-remote --exit-code "$repo" "refs/heads/$branch" >/dev/null 2>&1; do
   echo
   cat "$KEY.pub"
   echo "------------------------------------------------------------------------------"
-  read -rp "Press Enter once the key is added (Ctrl+C to stop)... " _
+  read -rp "Press Enter once the key is added (Ctrl+C to stop)... " _ </dev/tty
   if ! git ls-remote --exit-code "$repo" "refs/heads/$branch" >/dev/null 2>&1; then
     echo "Still no access (or the branch \"$branch\" does not exist). Check the key and the branch name."
   fi

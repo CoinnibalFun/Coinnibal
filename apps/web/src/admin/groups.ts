@@ -10,10 +10,10 @@ import { faucetTokenToRegister, setupSteps } from './setup';
 /**
  * The admin panel's drawers, few and grouped (the owner runs everything from here): Network,
  * Setup (deploy), Mint, Game, Community (WL, Tasks, Collabs), Safety (integrity), Feedback (players' messages),
- * Settings.
+ * Appetizers (the early cards of the landing page), Settings.
  */
-export type AdminGroup = 'network' | 'setup' | 'mint' | 'game' | 'community' | 'safety' | 'feedback' | 'settings';
-export const ADMIN_GROUPS: readonly AdminGroup[] = ['network', 'setup', 'mint', 'game', 'community', 'safety', 'feedback', 'settings'];
+export type AdminGroup = 'network' | 'setup' | 'mint' | 'game' | 'community' | 'safety' | 'feedback' | 'appetizers' | 'settings';
+export const ADMIN_GROUPS: readonly AdminGroup[] = ['network', 'setup', 'mint', 'game', 'community', 'safety', 'feedback', 'appetizers', 'settings'];
 
 /** The chain drawers (status for everyone, writes for the contract owner). */
 export const CHAIN_GROUPS: readonly AdminGroup[] = ['network', 'setup', 'mint', 'game'];
@@ -29,6 +29,7 @@ export const GROUP_LABEL: Record<AdminGroup, string> = {
   community: 'Community',
   safety: 'Safety',
   feedback: 'Feedback',
+  appetizers: 'Appetizers',
   settings: 'Settings',
 };
 
@@ -100,6 +101,8 @@ export interface SummaryInput {
   pins?: BuildPins;
   /** Players' messages not read yet (null: not known, no admin session). */
   feedbackUnread?: number | null;
+  /** The Appetizer cards handed out and posted (null: not known, no admin session). */
+  appetizers?: { total: number; posted: number } | null;
   /** The owner's verified signed pins of this chain. */
   signed?: Pins | null;
 }
@@ -187,10 +190,15 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
       if (n === null || n === undefined) return { now: 'Sign in as the admin to read the messages.', next: null };
       return { now: n === 0 ? 'No unread messages.' : `${n} unread message${n === 1 ? '' : 's'}.`, next: n > 0 ? 'Read them below, newest first.' : null };
     }
+    case 'appetizers': {
+      const a = i.appetizers;
+      if (!a) return { now: 'Sign in as the admin to see the cards.', next: null };
+      return { now: `${a.total.toLocaleString('en-US')} card${a.total === 1 ? '' : 's'} handed out · ${a.posted.toLocaleString('en-US')} posted on X.`, next: null };
+    }
     case 'settings': {
       const st = i.settings;
       if (!st) return { now: 'Sign in as the admin to see the switches.', next: null };
-      return { now: `WL ${st.wlOpen ? 'open' : 'closed'} · collabs ${st.collabOpen ? 'open' : 'closed'} · @${st.xHandle}`, next: null };
+      return { now: `WL ${st.wlOpen ? 'open' : 'closed'} · collabs ${st.collabOpen ? 'open' : 'closed'} · appetizers ${st.appetizerOpen ? 'open' : 'closed'} · @${st.xHandle}`, next: null };
     }
   }
 }
