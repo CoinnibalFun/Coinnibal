@@ -1,7 +1,9 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { followIntent, typedHandle } from '../src/site/appetizer/AppetizerSheet';
+import { resetOurPost } from '../src/site/appetizer/PostBox';
 import { readAppetizer, readStep, resetSteps, saveAppetizer } from '../src/site/appetizer/stored';
+import { setMatchingQueries } from '../src/test/media';
 import { Landing } from '../src/site/landing/Landing';
 import { resetSiteSettings } from '../src/site/settings';
 import { storageKey } from '../src/storageKey';
@@ -17,9 +19,24 @@ beforeEach(() => {
   resetSiteSettings();
   localStorage.clear();
   resetSteps();
+  resetOurPost();
   history.replaceState(null, '', '/');
 });
-afterEach(() => restore());
+afterEach(() => {
+  restore();
+  setMatchingQueries([]);
+});
+
+/** Our post as `GET /api/appetizer/post` shows it. */
+const OUR_VIEW = {
+  url: OUR_POST,
+  handle: 'Coinnibalfun',
+  name: 'Coinnibal',
+  avatar: 'https://pbs.twimg.com/profile_images/1/me_400x400.png',
+  text: 'The kitchen is open. Grab a seat before the coinnibals arrive.',
+  photo: { url: 'https://pbs.twimg.com/media/Gabc123.jpg', width: 1200, height: 675 },
+  at: Date.UTC(2026, 10, 20, 12),
+};
 
 function serve(open: boolean, claim?: (call: Call) => unknown, extra: Record<string, unknown> = {}, settings: Record<string, unknown> = {}) {
   const m = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, appetizerOpen: open, ...settings } }, ...(claim ? { 'POST /api/appetizer': claim } : {}), ...extra });
@@ -116,6 +133,68 @@ describe('the Appetizer on the landing', { timeout: 30_000 }, () => {
     expect(m.calls.find((c) => c.method === 'POST' && c.path === '/api/appetizer')?.body).toEqual({ wallet: WALLET, handle: 'Satoshi_Nibbles', followed: true, liked: true });
   });
 
+  it('shows our post inside step 2 on narrower screens: read once the sheet opens, the box opens it on X and counts', async () => {
+    const m = serve(true, () => ({ card: CARD, existing: false }), { 'GET /api/appetizer/post': { post: OUR_VIEW } }, { appetizerPostUrl: OUR_POST });
+    render(<Landing />);
+    await screen.findByTestId('ld-appetizer');
+    // the landing alone never asks for it
+    await new Promise((r) => setTimeout(r, 50));
+    expect(m.calls.some((c) => c.path === '/api/appetizer/post')).toBe(false);
+    fireEvent.click(screen.getByTestId('ld-appetizer'));
+    const dialog = await screen.findByRole('dialog', undefined, { timeout: 5000 });
+    expect(dialog.className).not.toContain('ap-sheet--cols');
+    const box = await within(dialog).findByTestId('ap-xpost');
+    expect(box.closest('[data-testid="ap-step-like"]')).toBeTruthy();
+    expect(box.className).toContain('is-compact');
+    await waitFor(() => expect(box.textContent).toContain('The kitchen is open.'));
+    expect(box.textContent).toContain('@Coinnibalfun');
+    expect(box.getAttribute('href')).toBe(OUR_POST);
+    expect(box.getAttribute('target')).toBe('_blank');
+    // compact: no picture, the step's own button right under it
+    expect(box.querySelector('.ap-xpost__photo')).toBeNull();
+    expect(within(dialog).getByTestId('ap-like')).toBeTruthy();
+    follow(dialog);
+    await waitFor(() => expect(within(dialog).getByTestId('ap-step-follow').className).toContain('is-done'));
+    expect(serveButton(dialog).disabled).toBe(true);
+    fireEvent.click(box);
+    await waitFor(() => expect(serveButton(dialog).disabled).toBe(false));
+    expect(within(dialog).getByTestId('ap-step-like').className).toContain('is-done');
+    expect(m.calls.filter((c) => c.path === '/api/appetizer/post')).toHaveLength(1);
+  });
+
+  it('on wide screens our post sits beside the checklist (two columns), with its picture and "Like + comment on X"', async () => {
+    setMatchingQueries(['(min-width: 960px)']);
+    serve(true, undefined, { 'GET /api/appetizer/post': { post: OUR_VIEW } }, { appetizerPostUrl: OUR_POST });
+    const dialog = await openSheet();
+    expect(dialog.className).toContain('ap-sheet--cols');
+    const box = await within(dialog).findByTestId('ap-xpost');
+    expect(box.closest('.ap-cols__post')).toBeTruthy();
+    expect(box.closest('[data-testid="ap-step-like"]')).toBeNull();
+    await waitFor(() => expect(box.querySelector('.ap-xpost__photo')?.getAttribute('src')).toBe(OUR_VIEW.photo.url));
+    expect(box.textContent).toContain('Like + comment on X');
+    expect(box.textContent).toContain('20 Nov 2026');
+    fireEvent.click(box);
+    await waitFor(() => expect(within(dialog).getByTestId('ap-step-like').className).toContain('is-done'));
+  });
+
+  it('when X cannot show our post the box still links to it; with no post set there is no box and one column', async () => {
+    setMatchingQueries(['(min-width: 960px)']);
+    serve(true, undefined, { 'GET /api/appetizer/post': { post: null } }, { appetizerPostUrl: OUR_POST });
+    const dialog = await openSheet();
+    const box = await within(dialog).findByTestId('ap-xpost');
+    await waitFor(() => expect(box.textContent).toContain('Open the post on X to like it and leave a comment.'));
+    expect(box.getAttribute('href')).toBe(OUR_POST);
+    cleanup();
+    restore();
+    resetSiteSettings();
+    resetOurPost();
+    const m = serve(true);
+    const plain = await openSheet();
+    expect(plain.className).not.toContain('ap-sheet--cols');
+    expect(within(plain).queryByTestId('ap-xpost')).toBeNull();
+    expect(m.calls.some((c) => c.path === '/api/appetizer/post')).toBe(false);
+  });
+
   it('checks the wallet and the handle before ordering', async () => {
     const m = serve(true, () => ({ card: CARD, existing: false }));
     const dialog = await openSheet();
@@ -151,7 +230,15 @@ describe('the Appetizer on the landing', { timeout: 30_000 }, () => {
     expect(within(dialog).getByLabelText("Paste your post's link (required)")).toBeTruthy();
     const x = within(dialog).getByTestId('ap-post-x').getAttribute('href') ?? '';
     const text = new URL(x).searchParams.get('text') ?? '';
-    expect(text).toBe(`Got my Coinnibal early card: The Appetizer No. 0042\nhttps://${location.host}/appetizer/${CARD.code}`);
+    expect(text).toBe(`The Appetizer is out \u{1F37D}\u{FE0F}\nGrabbed my seat before the coinnibals showed up \u{1FA99}\nhttps://${location.host}/appetizer/${CARD.code}`);
+    // post and paste in one place: the key that writes the post sits in the link's own form, the hint under the field
+    const form = within(dialog).getByTestId('ap-post-x').closest('form')!;
+    expect(form).toBeTruthy();
+    expect(within(form).getByLabelText("Paste your post's link (required)")).toBeTruthy();
+    expect(within(form).getByText('(Paste the link of the post where you shared your card)')).toBeTruthy();
+    expect(within(form).getByRole('button', { name: 'Save link' })).toBeTruthy();
+    // never a perk: the post says nothing of the WL, a reward or a chance
+    expect(text).not.toMatch(/\bWL\b|whitelist|reward|chance|perk|airdrop/i);
     expect(within(dialog).getByRole('button', { name: /Download card/ })).toBeTruthy();
     // the wallet is nowhere: not in the sheet, the page, the post, the link or the browser's storage
     for (const s of [document.body.innerHTML, x, location.href, JSON.stringify({ ...localStorage })]) {
@@ -183,7 +270,7 @@ describe('the Appetizer on the landing', { timeout: 30_000 }, () => {
   });
 
   it.each([
-    ['post_unverified', 422, { error: 'post_unverified', message: 'x' }, "Your card is not in that post. Post it with the button above (keep the link in it), then paste that post's link."],
+    ['post_unverified', 422, { error: 'post_unverified', message: 'x' }, 'Your card is not in that post. Post it with "Post on X" (keep the link in it), then paste that post\'s link.'],
     ['bad_post', 400, { error: 'bad_post', message: 'x' }, 'That post was not found under @Satoshi_Nibbles. Paste the link to your own post.'],
     ['unchecked', 200, { ok: true, verified: false }, 'Saved! X did not answer just now, so the kitchen will check your post by hand.'],
   ] as const)('says how the post link went: %s', async (_name, status, body, message) => {
