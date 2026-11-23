@@ -5,9 +5,9 @@
  * ------------------------------------------------------------------------- */
 
 .ld-root {
-  /* the seed rail is a band of the sticky header (SeedRail.tsx): the header here is its bar (72 px, 64 on a phone),
-     the rail and the header's rule. Anchors land below all of it. */
-  --ld-rail-h: 16px;
+  /* the seed rail (SeedRail.tsx) is threaded on the sticky header's bottom rule: the seeds hang half below it. Anchors
+     land below the header and that hanging half. */
+  --ld-rail-h: 7px;
   --ld-head-h: calc(75px + var(--ld-rail-h) + env(safe-area-inset-top, 0px));
   /* no square blue flash on a tap: every control here has its own press state */
   -webkit-tap-highlight-color: transparent;
@@ -70,13 +70,10 @@
 }
 
 /* ── I · the plain at dawn ───────────────────────────────────────────── */
-.ld-plate1 {
-  border-top: 0;
-}
+/* the hero starts right under the header: the header's rule (with the seed rail on it) is its top edge */
 .ld-hero__ring {
   aspect-ratio: auto !important;
   min-height: 860px;
-  border-top: var(--stroke) solid var(--outline);
   border-bottom: var(--stroke) solid var(--outline);
 }
 .ld-hero__inner {
@@ -2563,41 +2560,45 @@
   }
 }
 
-/* the seed rail (SeedRail.tsx): a coin eats its way along the header as you read. The rail is a band of the sticky
-   header, above its rule and on its paper, so nothing scrolls under the seeds; the track keeps to the page gutter. */
+/* the seed rail (SeedRail.tsx): a coin eats its way along the header as you read. The seeds are threaded on the
+   header's bottom rule like beads on a string, from one edge of the page to the other: the rule is the track, the
+   seeds straddle it (their lower half hangs over the page, ink-ringed so they read on day and night alike), and the
+   coin rides the rule, leaving it bare behind it. The rail takes no height of its own. */
 .ld-rail {
-  position: relative;
-  height: var(--ld-rail-h);
+  --seed: 24px;
+  --coin: 22px;
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  /* the rail's middle on the middle of the header's rule (the rule hangs under the header's padding box) */
+  bottom: calc(-0.5 * var(--stroke) - 8px);
+  height: 16px;
   pointer-events: none;
 }
 .ld-rail__track {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: max(var(--gutter), calc(50% - 656px + var(--gutter)));
-  right: max(var(--gutter), calc(50% - 656px + var(--gutter)));
+  inset: 0 8px;
   container-type: inline-size;
 }
 .ld-rail__seeds {
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 2px;
-  height: 12px;
-  /* whole seeds only: the tile stretches a hair so the row ends on a seed at the gutter */
-  background: radial-gradient(circle at 50% 50%, var(--sun) 0 2.6px, var(--outline) 2.7px 4.2px, transparent 4.6px) 0 0 / 24px 12px round no-repeat;
-  clip-path: inset(0 0 0 calc(var(--p) * (100% - 20px) + 14px));
+  inset: 0;
+  /* whole seeds only, evenly spaced: the tile stretches a hair so the row ends on a seed at each edge */
+  background: radial-gradient(circle at 50% 50%, var(--sun) 0 3.2px, var(--outline) 3.3px 5px, transparent 5.4px) 0 50% / var(--seed) 16px round no-repeat;
+  /* eaten up to the coin's mouth */
+  clip-path: inset(0 0 0 calc(var(--p) * (100% - var(--coin)) + var(--coin) * 0.6));
 }
 .ld-rail__coin {
   position: absolute;
   left: 0;
-  top: -2px;
+  top: calc(50% - var(--coin) / 2);
   line-height: 0;
-  transform: translateX(calc(var(--p) * (100cqw - 20px)));
+  transform: translateX(calc(var(--p) * (100cqw - var(--coin))));
 }
 @media (max-width: 479px) {
-  .ld-rail__seeds {
-    background-size: 20px 12px;
+  .ld-rail {
+    --seed: 20px;
   }
 }
 
