@@ -17,8 +17,9 @@ body {
 }
 
 .st-root {
-  min-height: 100vh;
-  min-height: 100svh;
+  /* viewport units divide by the wide-screen zoom (the end of this file): inside a zoomed page they grow with it */
+  min-height: calc(100vh / var(--page-zoom, 1));
+  min-height: calc(100svh / var(--page-zoom, 1));
   display: flex;
   flex-direction: column;
   overflow-x: clip;
@@ -41,7 +42,7 @@ body {
 /* the section title on every top bar: a sun tab, half the section heading's size (founder, 18 Nov: "headings must be
    big"). Scoped to the site, so the game lobby's own bars (.kl-plate) keep their caption. */
 .st-root {
-  --plate-fs: clamp(22px, calc(1.4vw + 12.5px), 32px);
+  --plate-fs: clamp(22px, calc(1.4vw / var(--page-zoom, 1) + 12.5px), 32px);
 }
 .st-root .kb-plate {
   padding-block: 18px;
@@ -326,9 +327,9 @@ body {
   display: grid;
   gap: 2px;
   min-width: 240px;
-  max-width: min(360px, calc(100vw - 2 * var(--gutter)));
+  max-width: min(360px, calc(100vw / var(--page-zoom, 1) - 2 * var(--gutter)));
   /* never past the bottom edge: a longer menu scrolls inside itself */
-  max-height: calc(100dvh - var(--st-head-h) - env(safe-area-inset-top, 0px) - 24px);
+  max-height: calc(100dvh / var(--page-zoom, 1) - var(--st-head-h) - env(safe-area-inset-top, 0px) - 24px);
   overflow-y: auto;
   overscroll-behavior: contain;
   box-sizing: border-box;
@@ -407,7 +408,7 @@ html.st-menu-open {
     bottom: calc(10px + env(safe-area-inset-bottom, 0px));
     min-width: 0;
     max-width: none;
-    max-height: calc(100dvh - var(--st-head-h) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 20px);
+    max-height: calc(100dvh / var(--page-zoom, 1) - var(--st-head-h) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 20px);
     padding: 12px !important;
     gap: 4px;
     transform: none;
@@ -525,7 +526,7 @@ html.st-menu-open {
 .st-foot__land {
   position: relative;
   /* the ground runs on under a phone's home bar */
-  height: calc(clamp(190px, 20vw, 288px) + env(safe-area-inset-bottom, 0px));
+  height: calc(clamp(190px, 20vw / var(--page-zoom, 1), 288px) + env(safe-area-inset-bottom, 0px));
   pointer-events: none;
 }
 .st-foot__ring {
@@ -641,7 +642,7 @@ html.st-menu-open {
   /* the header's column (1312 px less the gutters), so a page's text lines up with the logo and the title strip */
   max-width: 1312px;
   margin: 0 auto;
-  padding: clamp(28px, 6vw, 64px) var(--gutter) clamp(56px, 8vw, 96px);
+  padding: clamp(28px, 6vw / var(--page-zoom, 1), 64px) var(--gutter) clamp(56px, 8vw / var(--page-zoom, 1), 96px);
 }
 .st-kicker {
   display: inline-block;
@@ -670,7 +671,7 @@ html.st-menu-open {
   border: var(--stroke) solid var(--outline);
   border-radius: var(--r-card);
   box-shadow: var(--sh-3);
-  padding: clamp(18px, 3vw, 28px);
+  padding: clamp(18px, 3vw / var(--page-zoom, 1), 28px);
 }
 .st-card--flat {
   box-shadow: none;
@@ -860,7 +861,7 @@ select.st-input {
 .st-gate {
   display: grid;
   place-items: center;
-  min-height: 70vh;
+  min-height: calc(70vh / var(--page-zoom, 1));
   padding: 48px 16px;
   text-align: center;
 }
@@ -874,7 +875,7 @@ select.st-input {
   font-family: var(--font-display);
   font-variation-settings: var(--fv-display);
   font-weight: 800;
-  font-size: clamp(44px, 9vw, 76px);
+  font-size: clamp(44px, 9vw / var(--page-zoom, 1), 76px);
   line-height: 0.95;
   letter-spacing: -0.025em;
 }
@@ -914,8 +915,8 @@ select.st-input {
 
 /* ── the loading screen: a coin munching a row of seeds (SiteLoader.tsx, index.html) ── */
 .st-loadpage {
-  min-height: 100vh;
-  min-height: 100dvh;
+  min-height: calc(100vh / var(--page-zoom, 1));
+  min-height: calc(100dvh / var(--page-zoom, 1));
   display: grid;
   place-items: center;
 }
@@ -1109,7 +1110,7 @@ html[data-turn='back']::view-transition-old(root) {
 
 /* recover.tsx: a page that did not open (a stale tab after a deploy, or a crash inside a page) */
 .site-trouble {
-  min-height: 70vh;
+  min-height: calc(70vh / var(--page-zoom, 1));
   display: grid;
   place-items: center;
   padding: 48px 20px;
@@ -1128,7 +1129,7 @@ html[data-turn='back']::view-transition-old(root) {
 }
 .site-trouble__h {
   margin: 8px 0 10px;
-  font-size: clamp(28px, 5vw, 40px);
+  font-size: clamp(28px, 5vw / var(--page-zoom, 1), 40px);
   line-height: 1.05;
 }
 .site-trouble__card p {
@@ -1149,11 +1150,16 @@ html[data-turn='back']::view-transition-old(root) {
   }
 }
 
-/* very large screens (1440p and up): the whole site page is zoomed, so its type and stickers keep
-   their reading size on a 27-32" monitor instead of a small column in a sea of paper */
-@media (min-width: 2200px) and (min-height: 1200px) {
-  .st-root {
-    --page-zoom: 1.25;
+/* wider than the 1440 px design: the whole site page is the 1440 layout scaled up with the window (header,
+   rail, hero, sections, footer and the sheets opened over them), never a 1312 px column in a sea of paper.
+   tan(atan2(a, b)) is the plain ratio a / b: 100vw / 1440px as a number, with no script, so the prerendered landing
+   paints at its final size. Both lengths grow alike inside a zoomed box, so the ratio reads the same at any depth;
+   viewport units inside the page divide by --page-zoom (they would grow with the zoom). Past 2880 px the zoom stays
+   at 2 and the column centres again. The game (.kl-root, the arena) is not a site page and keeps its own size. */
+@media (min-width: 1441px) {
+  .st-root,
+  :root:has(.st-root) :is(.kb-sheet-layer, .kb-toasts) {
+    --page-zoom: min(2, tan(atan2(100vw, 1440px)));
     zoom: var(--page-zoom);
   }
 }

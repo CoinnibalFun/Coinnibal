@@ -19,7 +19,7 @@
   right: 0;
   bottom: 0;
   width: 100%;
-  height: clamp(150px, 20vw, 280px);
+  height: clamp(150px, 20vw / var(--page-zoom, 1), 280px);
 }
 .wl-plate__cloud {
   position: absolute;
@@ -31,19 +31,19 @@
   right: 4%;
   /* the house stands on the hill's edge where it is (the hills stretch with the width; the row is a fixed 122 px):
      two lines fit that edge, the first while the hills keep their 150 px floor, the second as they grow with 20vw */
-  bottom: min(158px, max(calc(6.6vw + 21px), calc(12.5vw - 24px)));
+  bottom: min(158px, max(calc(6.6vw / var(--page-zoom, 1) + 21px), calc(12.5vw / var(--page-zoom, 1) - 24px)));
   display: flex;
   align-items: flex-end;
   gap: 2px;
 }
 .wl-page {
   position: relative;
-  padding-bottom: clamp(110px, 12vw, 170px) !important;
+  padding-bottom: clamp(110px, 12vw / var(--page-zoom, 1), 170px) !important;
 }
 .wl-loading {
   display: grid;
   place-items: center;
-  min-height: 40vh;
+  min-height: calc(40vh / var(--page-zoom, 1));
 }
 .wl-error {
   max-width: 560px;

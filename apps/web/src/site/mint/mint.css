@@ -10,7 +10,7 @@
   isolation: isolate;
   background: var(--trench);
   color: var(--cream);
-  padding: clamp(48px, 7vw, 96px) var(--gutter) clamp(120px, 12vw, 168px);
+  padding: clamp(48px, 7vw / var(--page-zoom, 1), 96px) var(--gutter) clamp(120px, 12vw / var(--page-zoom, 1), 168px);
 }
 .mt-night--quiet {
   padding-top: 72px;
@@ -70,7 +70,7 @@
   right: 0;
   bottom: 0;
   z-index: -1;
-  height: clamp(90px, 9vw, 130px);
+  height: clamp(90px, 9vw / var(--page-zoom, 1), 130px);
   --sg-fill: var(--trench);
 }
 .mt-band .kb-seigaiha {
@@ -85,7 +85,7 @@
   margin: 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: clamp(32px, 4vw, 56px);
+  gap: clamp(32px, 4vw / var(--page-zoom, 1), 56px);
   align-items: center;
 }
 .mt-wrap--quiet {
@@ -118,7 +118,7 @@
 }
 .mt-h {
   margin: 12px 0 18px;
-  font-size: clamp(44px, 5.2vw, 72px);
+  font-size: clamp(44px, 5.2vw / var(--page-zoom, 1), 72px);
   line-height: 0.98;
   color: var(--cream);
 }
@@ -153,14 +153,14 @@
 /* the collection in plain words and the holder perks (WhyNft.tsx), full width under the card */
 .mt-about {
   grid-column: 1 / -1;
-  padding-top: clamp(8px, 2vw, 24px);
+  padding-top: clamp(8px, 2vw / var(--page-zoom, 1), 24px);
 }
 .mt-about__h {
   margin: 0 0 10px;
   font-family: var(--font-display);
   font-variation-settings: var(--fv-display);
   font-weight: 800;
-  font-size: clamp(28px, 3.4vw, 40px);
+  font-size: clamp(28px, 3.4vw / var(--page-zoom, 1), 40px);
   line-height: 1.05;
   color: var(--cream);
 }
@@ -638,7 +638,7 @@
 }
 .mt-token img {
   display: block;
-  width: clamp(150px, 19vw, 260px);
+  width: clamp(150px, 19vw / var(--page-zoom, 1), 260px);
   height: auto;
   aspect-ratio: 1;
   border: var(--stroke) solid var(--outline);
@@ -646,11 +646,11 @@
   background: var(--trench);
 }
 .mt-pile--1 .mt-token img {
-  width: clamp(220px, 26vw, 330px);
+  width: clamp(220px, 26vw / var(--page-zoom, 1), 330px);
 }
 .mt-pile--3 .mt-token img,
 .mt-pile--4 .mt-token img {
-  width: clamp(130px, 14vw, 190px);
+  width: clamp(130px, 14vw / var(--page-zoom, 1), 190px);
 }
 .mt-pile--2 .mt-token:nth-child(2) {
   margin-top: 46px;
