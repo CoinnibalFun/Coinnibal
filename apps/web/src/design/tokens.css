@@ -191,7 +191,7 @@
   --s-8: 64px;
   --s-9: 96px;
   /* never less than a landscape phone's notch / rounded-corner inset (viewport-fit=cover) */
-  --gutter: max(clamp(16px, 4.4vw, 64px), env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
+  --gutter: max(clamp(16px, 4.4vw / var(--page-zoom, 1), 64px), env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
   --measure: 62ch;
 
   /* ── radii: soft die-cut sticker corners ── */

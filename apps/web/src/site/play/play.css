@@ -9,7 +9,7 @@
   width: 100%;
   aspect-ratio: auto;
   grid-template-columns: minmax(0, 1fr);
-  min-height: min(880px, calc(100svh - 120px));
+  min-height: min(880px, calc(100svh / var(--page-zoom, 1) - 120px));
 }
 .pg-scene > .kb-ring__over {
   width: 100%;
@@ -20,7 +20,7 @@
   /* the header's column */
   max-width: 1312px;
   margin: 0 auto;
-  padding: clamp(40px, 6vw, 88px) var(--gutter) clamp(160px, 16vw, 240px);
+  padding: clamp(40px, 6vw / var(--page-zoom, 1), 88px) var(--gutter) clamp(160px, 16vw / var(--page-zoom, 1), 240px);
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
   gap: 32px;
@@ -38,7 +38,7 @@
 .pg-h {
   margin: 10px 0 14px;
   /* one size for every card page's title (closed pages, 404, /play) */
-  font-size: clamp(36px, 4.6vw, 56px);
+  font-size: clamp(36px, 4.6vw / var(--page-zoom, 1), 56px);
   line-height: 1;
 }
 /* each sentence of the title is its own block, so text-wrap: balance evens the lines of each one (with a <br> the
@@ -414,8 +414,8 @@
 
 /* checking the gate */
 .pg-wait {
-  min-height: 100vh;
-  min-height: 100svh;
+  min-height: calc(100vh / var(--page-zoom, 1));
+  min-height: calc(100svh / var(--page-zoom, 1));
   display: grid;
   place-content: center;
   justify-items: center;

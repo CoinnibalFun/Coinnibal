@@ -63,11 +63,13 @@ export function useGaze(ref: RefObject<Element | null>, { enabled = true, rest =
       const el = ref.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
+      // in the page's own pixels: on a wide screen the site is zoomed (site.css), the pointer's are the screen's
+      const zoom = (el as Element & { currentCSSZoom?: number }).currentCSSZoom || 1;
       if (r.bottom < -100 || r.top > innerHeight + 100) return;
       const cx = r.left + r.width / 2;
       const cy = r.top + r.height * 0.42;
-      const dx = x - cx;
-      const dy = y - cy;
+      const dx = (x - cx) / zoom;
+      const dy = (y - cy) / zoom;
       const d = Math.hypot(dx, dy) || 1;
       // full deflection from ~180 px away, gentler up close
       const k = Math.min(1, d / 180) * 4 * reach;
