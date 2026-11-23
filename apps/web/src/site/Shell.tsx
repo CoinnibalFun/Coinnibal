@@ -135,7 +135,7 @@ const signedIn = () => readStoredSession() !== null;
 /** The server render (the prerendered landing) has no stored session: neither has the browser's hydrating render. */
 const signedOut = () => false;
 
-export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** Extras hung under the header line (the landing's seed rail). */ children?: ReactNode }) {
+export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** Extras threaded on the header's bottom rule (the landing's seed rail). */ children?: ReactNode }) {
   const t = useT();
   const path = usePath();
   const peel = usePeelLetters<HTMLSpanElement>();

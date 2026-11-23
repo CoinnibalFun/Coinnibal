@@ -1105,7 +1105,6 @@ export const en = {
   'ld.ap.thanksUnchecked': "Saved! X did not answer just now, so the kitchen will check your post by hand.",
   'ld.ap.close': "Close",
   'ld.ap.forget': "Not your card? Clear it from this browser",
-  'ld.plate1': "Welcome to Coinnibal",
   'ld.feast.plate': "What is Coinnibal?",
   'ld.feast.h': "Meet <u>Coinnibal.</u>",
   'ld.feast.lede': "You play in a paid room with up to {n} coins. The {sym} you pay for the ticket become your coins.",
