@@ -50,6 +50,8 @@
       @keyframes boot-seed { 0% { transform: scale(1); } 4% { transform: translateY(-5px) scale(1.25); } 8%, 55% { transform: scale(0); opacity: 0; } 62% { transform: scale(1.2, 0.8); opacity: 1; } 68%, 100% { transform: scale(1); opacity: 1; } }
       @keyframes boot-walk { 0% { transform: translateX(-40px); opacity: 0; } 6%, 92% { opacity: 1; } 100% { transform: translateX(300px); opacity: 0; } }
       @keyframes boot-step { 50% { transform: translateY(-4px); } }
+      /* wider than the 1440 px design the site is zoomed with the window (site.css): the loader too, so it keeps its size when the page's own loader takes over */
+      @media (min-width: 1441px) { .boot { --z: min(2, tan(atan2(100vw, 1440px))); zoom: var(--z); min-height: calc(100vh / var(--z)); } }
       @media (prefers-reduced-motion: reduce) { .boot, .boot * { animation: none !important; opacity: 1; } .boot__coin { transform: translateX(-70px); } }
     </style>
   </head>
