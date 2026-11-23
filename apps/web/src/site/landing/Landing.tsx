@@ -881,7 +881,6 @@ export function Landing() {
         <SeedRail />
       </SiteHeader>
       <main id="main" className="ld-main" tabIndex={-1}>
-        <PlateLabel numeral={1} title={t('ld.plate1')} className="ld-plate1" />
         <Hero doors={doors} gameAccess={settings.gameAccess} handle={settings.xHandle} sound={sound} appetizer={{ open: settings.appetizerOpen, ready: loaded, postUrl: settings.appetizerPostUrl }} />
         <Feast />
         <Round />
