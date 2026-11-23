@@ -379,6 +379,16 @@ body {
 .st-head__tools:empty {
   display: none;
 }
+/* wide screens: the last link's text ends on the page column, as the logo starts on it (the link's padding hangs past
+   it), and a tools box holding only the hidden menu button takes no gap */
+@media (min-width: 900px) {
+  .st-nav {
+    margin-right: -12px;
+  }
+  .st-head__tools:not(:has(> :not(.st-menu-btn))) {
+    display: none;
+  }
+}
 /* the dimmed page behind the open menu: it starts under the header, so the logo and the close button stay sharp
    and the button is the real way to close it */
 .st-menu__scrim {

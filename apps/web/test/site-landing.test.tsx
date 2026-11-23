@@ -156,8 +156,10 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect([...screen.getByRole('navigation', { name: 'Footer' }).querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['https://x.com/coinnibalfun', '/docs']);
     // the FAQ does not send anyone to the collab page
     expect(screen.queryByText('Can my community get WL spots?')).toBeNull();
-    // each idea once: the round's length is the hero's sticker, nowhere else in the hero or its title strip
-    const hero = `${document.querySelector('.ld-plate1')?.textContent} ${document.querySelector('.ld-hero')?.textContent}`;
+    // each idea once: the round's length is the hero's sticker, nowhere else in the hero (no title strip above it: the
+    // hero starts right under the header)
+    expect(document.querySelector('main')!.firstElementChild!.classList.contains('ld-hero')).toBe(true);
+    const hero = document.querySelector('.ld-hero')?.textContent ?? '';
     expect(hero.match(/5-minute|five minutes?|0?5:00/gi)).toEqual(['05:00']);
     const page = document.querySelector('main')!.textContent ?? '';
     expect(page.match(/Coins eating coins/g)).toHaveLength(1);
@@ -502,7 +504,6 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     }
     for (const h of ['Meet Coinnibal.', 'Four steps, one round.', 'Five rooms, one fee.', 'Why get the NFT?', 'Good to know.']) expect(screen.getByRole('heading', { name: h })).toBeTruthy();
     expect([...document.querySelectorAll('main .kb-plate__title')].map((t) => t.textContent)).toEqual([
-      'Welcome to Coinnibal',
       'What is Coinnibal?',
       'How a round works',
       'Rooms and the fee',
