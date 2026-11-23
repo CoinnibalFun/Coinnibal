@@ -186,25 +186,14 @@ function Hero({
               )}
             </Sticker>
           </motion.div>
-          {/* the right column on a wide screen (landing.css): the round sticker and the sound button side by side, the
-              Appetizer's slip under them, the group centred on the card. Below 900 px the column dissolves
-              (display: contents): the slip under the card, the round sticker pinned on its corner, the sound button
-              over the pond */}
-          <div className="ld-hero__side">
-            <div className="ld-hero__stickers">
-              <button type="button" className="ld-sound mono" aria-pressed={sound.on} onClick={sound.toggle}>
-                <Icon name={sound.on ? 'sound' : 'mute'} size={16} />
-                <span>{sound.on ? t('ld.soundOn') : t('ld.soundOff')}</span>
-              </button>
-              <motion.div className="ld-hero__badge-wrap" variants={m.popInSolid} custom={0.5} initial={entrance} animate="shown">
-                <Sticker tone="sun" pad="sm" tilt={4} className="ld-hero__badge">
-                  <span className="num ld-hero__badge-n">{String(FACTS.rules.roundMin).padStart(2, '0')}:00</span>
-                  <span className="mono ld-hero__badge-l">{t('ld.badge')}</span>
-                </Sticker>
-              </motion.div>
-            </div>
-            {appetizer.open && <AppetizerSlip ready={appetizer.ready} xHandle={handle} postUrl={appetizer.postUrl} />}
-          </div>
+          <motion.div className="ld-hero__badge-wrap" variants={m.popInSolid} custom={0.5} initial={entrance} animate="shown">
+            <Sticker tone="sun" pad="sm" tilt={4} className="ld-hero__badge">
+              <span className="num ld-hero__badge-n">{String(FACTS.rules.roundMin).padStart(2, '0')}:00</span>
+              <span className="mono ld-hero__badge-l">{t('ld.badge')}</span>
+            </Sticker>
+          </motion.div>
+          {/* the Appetizer's order slip: under the round sticker on a wide screen, beside it under the card on a phone */}
+          {appetizer.open && <AppetizerSlip ready={appetizer.ready} xHandle={handle} postUrl={appetizer.postUrl} />}
         </div>
         <CoinPond still={reduced} events={{ onEat: sound.chomp }} />
         {/* both hints are in the HTML; CSS shows the mouse one where the pointer is a mouse, and neither with reduced
@@ -213,6 +202,10 @@ function Hero({
           <span className="ld-pond__hint-touch">{t('ld.pondHint')}</span>
           <span className="ld-pond__hint-mouse">{t('ld.pondHintMouse')}</span>
         </p>
+        <button type="button" className="ld-sound mono" aria-pressed={sound.on} onClick={sound.toggle}>
+          <Icon name={sound.on ? 'sound' : 'mute'} size={16} />
+          <span>{sound.on ? t('ld.soundOn') : t('ld.soundOff')}</span>
+        </button>
       </RingScene>
     </section>
   );

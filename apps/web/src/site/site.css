@@ -201,21 +201,16 @@ body {
 .st-nav {
   display: flex;
   align-items: center;
-  gap: 6px;
-  /* the logo's letters ride 4 px low in their box (.st-head__home): the nav shares their centre line */
-  position: relative;
-  top: 2px;
+  gap: 2px;
 }
 .st-nav__link {
   position: relative;
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  padding: 0 14px;
-  /* the nav carries the logo's weight: a bold, full-ink word beside the big wordmark */
-  font-size: 17px;
-  font-weight: 800;
-  letter-spacing: -0.005em;
+  padding: 0 12px;
+  font-size: 15px;
+  font-weight: 700;
   color: var(--ink) !important;
   text-decoration: none;
   border: var(--stroke-sm) solid transparent;
@@ -238,9 +233,9 @@ body {
 }
 .st-nav__link--soon,
 .st-nav__link--soon:hover {
-  gap: 8px;
+  gap: 6px;
   cursor: default;
-  color: var(--ink) !important;
+  color: var(--ink-2) !important;
   background: none;
   border-color: transparent;
   user-select: none;
@@ -255,19 +250,16 @@ body {
   background: var(--cream);
 }
 .st-soon {
-  padding: 2px 7px 3px;
+  padding: 1px 6px 2px;
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--ink-fixed);
   background: var(--sun);
-  border: 2px solid var(--outline);
-  border-radius: 7px;
-  /* a stamp, not a sticker: a 2 px ink offset like the logo's letters */
-  box-shadow: 1.5px 2px 0 var(--outline);
+  border: 1.5px solid var(--outline);
+  border-radius: 6px;
   transform: rotate(-3deg);
   transition: transform var(--dur-micro) var(--ease-spring);
 }
@@ -385,17 +377,6 @@ body {
 }
 .st-head__tools:empty {
   display: none;
-}
-/* wide: the menu button is hidden, so a tools box holding only it would leave a gap after the nav */
-@media (min-width: 900px) {
-  .st-head__tools:not(:has(> :not(.st-menu-btn))) {
-    display: none;
-  }
-  /* with nothing after it, the nav's last entry ends its text on the column's right edge, where the hero's right
-     column ends too (its padding and border hang into the gutter) */
-  .st-head__inner:not(:has(.st-head__tools > :not(.st-menu-btn))) .st-nav > :last-child {
-    margin-right: calc(-14px - var(--stroke-sm));
-  }
 }
 /* the dimmed page behind the open menu: it starts under the header, so the logo and the close button stay sharp
    and the button is the real way to close it */
@@ -1160,12 +1141,11 @@ html[data-turn='back']::view-transition-old(root) {
   gap: 12px;
 }
 
-/* the plate captions line up with the header's 1312 px column (the logo's left edge, the nav's right edge) instead
-   of the window's edges (their rules still span the page). A percentage padding is of the page's own width, so the
-   scrollbar and the big screens' zoom need no correction */
-@media (min-width: 640px) {
+/* wide screens: the plate captions line up with the header's 1312 px column instead of running to
+   the far edges of a 2560 px window (their rules still span the page) */
+@media (min-width: 1440px) {
   .st-root .kb-plate {
-    padding-inline: max(var(--gutter), calc(50% - 656px + var(--gutter)));
+    padding-inline: calc((100vw / var(--page-zoom, 1) - 1312px) / 2 + var(--gutter));
   }
 }
 
