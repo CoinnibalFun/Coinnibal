@@ -2,13 +2,13 @@
 .nf {
   display: grid;
   grid-template-columns: 5fr 7fr;
-  gap: clamp(24px, 4vw, 56px);
+  gap: clamp(24px, 4vw / var(--page-zoom, 1), 56px);
   align-items: center;
   width: 100%;
   /* the header's column: the copy starts under the logo and the title strip */
   max-width: 1312px;
   margin: 0 auto;
-  padding: clamp(28px, 6vw, 72px) var(--gutter) clamp(40px, 7vw, 96px);
+  padding: clamp(28px, 6vw / var(--page-zoom, 1), 72px) var(--gutter) clamp(40px, 7vw / var(--page-zoom, 1), 96px);
   box-sizing: border-box;
 }
 .nf__title {
@@ -17,7 +17,7 @@
   font-family: var(--font-display);
   font-variation-settings: var(--fv-display);
   font-weight: 800;
-  font-size: clamp(36px, 4.6vw, 56px);
+  font-size: clamp(36px, 4.6vw / var(--page-zoom, 1), 56px);
   line-height: 1.02;
   letter-spacing: -0.02em;
 }

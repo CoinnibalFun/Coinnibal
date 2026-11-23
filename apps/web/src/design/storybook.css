@@ -1455,9 +1455,9 @@ h2,
   display: flex;
   flex-direction: column;
   width: min(540px, 100%);
-  max-height: min(740px, calc(100vh - 48px));
+  max-height: min(740px, calc(100vh / var(--page-zoom, 1) - 48px));
   /* the visible viewport (a phone's browser bars come and go), less the layer's padding */
-  max-height: min(740px, calc(100dvh - var(--sheet-pad-top) - var(--sheet-pad-bottom)));
+  max-height: min(740px, calc(100dvh / var(--page-zoom, 1) - var(--sheet-pad-top) - var(--sheet-pad-bottom)));
   min-height: 0;
   border: var(--stroke) solid var(--outline);
   border-radius: var(--r-panel);
