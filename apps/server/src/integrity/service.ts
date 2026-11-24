@@ -92,11 +92,12 @@ export class IntegrityService {
   private readonly maxSessions: number;
   private readonly maxTransfers: number;
   private readonly mono: () => number;
-  /** Every transfer ever added (a burst's shared detector run is only good while none came since). */
-  private transferSeq = 0;
-  /** When the last hold decision ran (`mono`), and the detector run a burst of them shares (`evaluate`). */
+  /**
+   * When the last hold decision ran (`mono`), and the detector run a burst of them shares (`evaluate`), with the
+   * wallets of every transfer added since it was made (their decisions run on their own again).
+   */
   private lastEvalAt = -Infinity;
-  private burst: { at: number; transfers: number; settings: IntegritySettings; cands: Candidate[] } | null = null;
+  private burst: { at: number; settings: IntegritySettings; cands: Candidate[]; since: Set<string> } | null = null;
 
   constructor(private readonly opts: IntegrityOptions) {
     this.log = opts.log ?? (() => {});
@@ -130,7 +131,10 @@ export class IntegrityService {
   }
 
   private addTransfer(t: IntegrityTransfer): void {
-    this.transferSeq++;
+    if (this.burst) {
+      this.burst.since.add(t.from);
+      this.burst.since.add(t.to);
+    }
     this.transfers.push(t);
     this.unsaved.transfers.push(t);
     if (this.transfers.length > this.maxTransfers + 1000) this.transfers.splice(0, this.transfers.length - this.maxTransfers);
@@ -315,30 +319,34 @@ export class IntegrityService {
   }
 
   /**
-   * Risk of one wallet now: the detectors over the part of the window that concerns it (cheap enough
-   * for a bell with many settlements). Dismissed flags do not count.
+   * Risk of one wallet now: the detectors over the part of the window that concerns it, or, in a burst of
+   * decisions (a bell), one run over the whole window shared by the burst (`HOLD_BURST_MS`). Dismissed flags do
+   * not count.
    */
   evaluate(wallet: string): { score: number; flags: string[] } {
     const th = this.state.settings.thresholds;
     const t = this.mono();
     let cands: Candidate[];
-    const burst = this.burst;
-    if (burst && t - burst.at <= HOLD_BURST_MS && burst.transfers === this.transferSeq && burst.settings === this.state.settings) {
-      // a bell: the whole window was run a moment ago. Only the wallet's own ticket that just ended is newer (bell
-      // abuse reads ended tickets only): that detector runs again over the wallet's own finished tickets.
+    const burst = this.burst && t - this.burst.at <= HOLD_BURST_MS && this.burst.settings === this.state.settings ? this.burst : null;
+    if (!burst) this.burst = null;
+    if (burst && !burst.since.has(wallet)) {
+      // a bell: the whole window was run a moment ago, and no value moved to or from this wallet since. Only its own
+      // ticket that just ended is newer (bell abuse reads ended tickets only): that detector runs again over the
+      // wallet's own finished tickets.
       const own: SessionSummary[] = [];
       for (const s of this.sessions.values()) if (s.wallet === wallet) own.push(s);
       const bell = detectBellAbuse({ now: this.now(), sessions: own, transfers: [] }, th).filter((c) => c.score >= th.flagMinScore);
       this.merge(bell);
       cands = [...burst.cands.filter((c) => !(c.kind === 'bell_abuse' && c.wallets.includes(wallet))), ...bell];
-    } else if (t - this.lastEvalAt <= HOLD_BURST_MS) {
+    } else if (!burst && t - this.lastEvalAt <= HOLD_BURST_MS) {
       // the second decision in a row: a bell settles every ticket of every instance at once, and each scoped run
       // costs a large part of a full one (a wallet's counterparties, rooms and networks reach most of the window),
       // so the rest of the burst shares one run over the whole window
       cands = runDetectors(this.snapshot(), th);
       this.merge(cands);
-      this.burst = { at: t, transfers: this.transferSeq, settings: this.state.settings, cands };
+      this.burst = { at: t, settings: this.state.settings, cands, since: new Set() };
     } else {
+      // on its own, or value moved for this wallet since the burst's run: the part of the window that concerns it
       cands = runDetectors(scopeSnapshot(this.snapshot(), wallet), th);
       this.merge(cands);
     }
