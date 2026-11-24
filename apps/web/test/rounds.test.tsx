@@ -411,6 +411,47 @@ describe('Round over sheet', () => {
   });
 });
 
+describe('a receipt keeps the room it was played in', () => {
+  const PRACTICE: RoomInfo = { id: 'practice-rookie-1', mode: 'practice', name: 'Rookie Pond #1', width: 4000, height: 4000, players: 0, bots: 10, maxPlayers: 50 };
+
+  it('a server restart pays out, the reconnect spectates practice: the slip and "New ticket" stay with the arena', () => {
+    setReducedMotion(true);
+    clockAt(START + 30_000);
+    // the exit receipt was printed in the $1 Room; the reconnect then put the live room on a practice pond
+    useUi.setState({
+      screen: 'roundover',
+      room: PRACTICE,
+      ticket: { entryFee: 1000 * M, arenaId: 1, session: 'SessExit' },
+      roundResult: { kind: 'exit', round: null, payout: 1000 * M, stats: STATS, standings: [], room: ARENA },
+      lastSettlement: null,
+    });
+    render(
+      <Kb>
+        <RoundOverSheet />
+      </Kb>,
+    );
+    expect(screen.getByText('Paid out · $1 Room')).toBeTruthy();
+    expect(screen.queryByText(/Rookie Pond/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /New ticket/ }));
+    expect(useUi.getState().lobbyIntent).toMatchObject({ ticket: 'arena:1', open: true });
+  });
+
+  it('eaten in an arena, then a reconnect: "Start over" still buys that arena\'s ticket', () => {
+    setReducedMotion(true);
+    clockAt(START + 30_000);
+    useUi.setState({ screen: 'dead', room: PRACTICE, ticket: { entryFee: 1000 * M, arenaId: 1, session: 'S' }, death: { stats: STATS, killer: 'Nakamoto', killerSkin: 1, room: ARENA } });
+    render(
+      <Kb>
+        <DeathSheet />
+      </Kb>,
+    );
+    const cta = screen.getByRole('button', { name: /^Start over/ });
+    expect(cta.textContent).toContain('New ticket · 1K $NIBAL');
+    fireEvent.click(cta);
+    expect(useUi.getState().lobbyIntent).toMatchObject({ ticket: 'arena:1', open: true });
+  });
+});
+
 /** The value of the receipt line labelled `label`. */
 function receiptLine(label: string): string | null | undefined {
   return [...document.querySelectorAll('.kb-receipt__line')].find((el) => el.querySelector('dt')?.textContent === label)?.querySelector('dd')?.textContent;
