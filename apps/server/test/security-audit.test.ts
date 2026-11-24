@@ -1,0 +1,73 @@
+import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Limiter } from '../src/net/limiter';
+import { AppetizerService } from '../src/site/appetizer';
+import type { XPostRead } from '../src/xlink';
+import { testSigner } from './signers';
+
+/** Security audit (November 2026): one regression test per confirmed finding. */
+
+describe('security audit: Appetizer image views', () => {
+  let dir = '';
+  afterEach(() => {
+    vi.useRealTimers();
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('a flood of card image fetches does not rewrite the whole card file every second (it is ~25 MB at 100k cards)', () => {
+    vi.useFakeTimers();
+    dir = mkdtempSync(join(tmpdir(), 'coinnibal-sec-views-'));
+    const file = join(dir, 'appetizers.json');
+    const s = new AppetizerService({ path: file, baseUrl: () => 'https://coinnibal.fun' });
+    const code = s.claim(testSigner().address, 'viewed_1').card.code;
+    // a claim is written within a second
+    vi.advanceTimersByTime(1_100);
+    const written = statSync(file).mtimeMs;
+    const res = { writeHead() {}, end() {} } as never;
+    const req = { method: 'GET', headers: {} } as never;
+    s.setRenderBroken('no canvas in this test');
+    let writes = 0;
+    let last = written;
+    // ten seconds of one image fetch a second (no limit applies to a cached card)
+    for (let i = 0; i < 10; i++) {
+      s.handle(req, res, `/appetizer/${code}.png`, '9.9.9.9');
+      vi.advanceTimersByTime(1_000);
+      const m = statSync(file, { throwIfNoEntry: false })?.mtimeMs ?? last;
+      if (m !== last) writes++;
+      last = m;
+    }
+    expect(writes).toBeLessThanOrEqual(1);
+    // the views are still kept: on flush (shutdown, backups) and on the slow timer
+    s.flush();
+    const again = new AppetizerService({ path: file, baseUrl: () => 'https://coinnibal.fun' });
+    expect(again.list().items[0].views).toBe(10);
+    // and a claim is still written within a second even while a slow views save waits
+    s.handle(req, res, `/appetizer/${code}.png`, '9.9.9.9');
+    s.claim(testSigner().address, 'second_2');
+    vi.advanceTimersByTime(1_100);
+    expect(new AppetizerService({ path: file, baseUrl: () => 'https://coinnibal.fun' }).total).toBe(2);
+  });
+});
+
+describe('security audit: Appetizer post links', () => {
+  it('a verified post is never replaced by a link X cannot check (anyone may send a link for a public card code)', async () => {
+    let xUp = true;
+    const readPost = async (id: string): Promise<XPostRead> => {
+      if (!xUp) return { ok: false, why: 'down' };
+      return { ok: true, post: { id, text: `my card ${code}`, handle: 'victim_1', userId: null, name: 'V', avatarUrl: null, createdAt: null, urls: [] } };
+    };
+    const s = new AppetizerService({ path: null, baseUrl: () => 'https://coinnibal.fun', postIp: new Limiter(1000, 60_000), readPost });
+    const code = s.claim(testSigner().address, 'victim_1').card.code;
+    expect(await s.setPost(code, 'https://x.com/victim_1/status/111')).toEqual({ ok: true, verified: true });
+    // an attacker (the card code is in the public share link) sends a made-up status of the same handle while X does
+    // not answer (its budget spent, or X down): the verified post must stay
+    xUp = false;
+    await expect(s.setPost(code, 'https://x.com/victim_1/status/999')).rejects.toMatchObject({ status: 503, code: 'x_unreachable' });
+    expect(s.list().items[0]).toMatchObject({ post: 'https://x.com/victim_1/status/111', postVerified: true });
+    // a card without a verified post still keeps an unchecked link while X is down (the visitor is not blocked)
+    const other = s.claim(testSigner().address, 'fresh_2').card.code;
+    expect(await s.setPost(other, 'https://x.com/fresh_2/status/5')).toEqual({ ok: true, verified: false });
+  });
+});
