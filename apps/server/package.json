@@ -20,7 +20,8 @@
     "e2e": "tsx scripts/e2e.ts",
     "nft:report": "tsx scripts/nft/report.ts",
     "nft:sheets": "tsx scripts/nft/sheets.ts",
-    "econ-sim": "tsx scripts/mainnet-econ-sim.ts"
+    "econ-sim": "tsx scripts/mainnet-econ-sim.ts",
+    "econ-mc": "tsx scripts/economy-sim.ts"
   },
   "dependencies": {
     "@coinnibal/art": "workspace:*",
