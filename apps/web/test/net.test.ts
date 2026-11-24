@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CLOSE_REPLACED as SHARED_CLOSE_REPLACED } from '@coinnibal/shared';
 import * as netModule from '../src/game/net';
-import { Net, WATCHDOG_MS, gameProtocols, retryDelay, type NetDown } from '../src/game/net';
+import { Net, WATCHDOG_MS, gameProtocols, jitter, retryDelay, type NetDown } from '../src/game/net';
 
 const CLOSE_REPLACED = SHARED_CLOSE_REPLACED;
 
@@ -42,6 +42,7 @@ class FakeSocket {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllGlobals();
   FakeSocket.all = [];
@@ -49,6 +50,8 @@ afterEach(() => {
 
 const setup = () => {
   vi.useFakeTimers();
+  // the retry jitter at its middle: the delays below are the plain backoff
+  vi.spyOn(Math, 'random').mockReturnValue(0.5);
   vi.stubGlobal('WebSocket', FakeSocket);
   const downs: NetDown[] = [];
   const net = new Net('ws://x/ws', { onOpen() {}, onClose: (d) => downs.push(d), onMessage() {}, onSnapshot() {} });
@@ -85,6 +88,16 @@ describe('Net', () => {
     FakeSocket.all[2].accept();
     FakeSocket.all[2].close();
     expect(downs[2]).toMatchObject({ kind: 'lost', attempt: 1 });
+  });
+});
+
+describe('Net: reconnect jitter', () => {
+  it('spreads each retry ±25 % so a thousand clients do not all knock at once after a restart', () => {
+    expect(jitter(1000, () => 0)).toBe(750);
+    expect(jitter(1000, () => 0.5)).toBe(1000);
+    expect(jitter(1000, () => 0.999)).toBeLessThanOrEqual(1250);
+    const spread = new Set(Array.from({ length: 50 }, (_, i) => jitter(4000, () => i / 50)));
+    expect(spread.size).toBeGreaterThan(40);
   });
 });
 

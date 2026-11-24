@@ -36,6 +36,9 @@ export interface NetHandlers {
 /** The reconnect backoff: 0.5 s, 1 s, 2 s, 4 s, then every 8 s. */
 export const retryDelay = (attempt: number): number => Math.min(8000, 500 * 2 ** Math.max(0, attempt - 1));
 
+/** ±25 % around `ms`: after a server restart a thousand clients must not all knock in the same instant. */
+export const jitter = (ms: number, rand: () => number = Math.random): number => Math.round(ms * (0.75 + 0.5 * rand()));
+
 /**
  * WebSocket with automatic reconnect, JSON + binary routing, ping, and a watchdog: a phone that changed networks (or
  * a path that went silent) keeps a socket the browser still thinks is open for a long time; when nothing at all
@@ -133,7 +136,7 @@ export class Net {
       this.handlers.onClose({ kind, attempt: 0, retryAt: null });
       return;
     }
-    const delay = retryDelay(++this.retry);
+    const delay = jitter(retryDelay(++this.retry));
     this.retryTimer = window.setTimeout(() => this.connect(), delay);
     this.handlers.onClose({ kind, attempt: this.retry, retryAt: performance.now() + delay });
   }
