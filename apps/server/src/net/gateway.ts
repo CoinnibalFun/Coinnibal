@@ -81,6 +81,12 @@ export const STAKE_UPGRADES_PER_WALLET_PER_MIN = 20;
  * noticed yet): past the cap, its wallet's reconnect may take its place. The web client pings every 2 s while it plays.
  */
 export const SILENT_PLAYER_MS = 5_000;
+/**
+ * A socket's view shape (`viewport`) changes at most once per this long; a later change waits for its turn (the
+ * newest wins). The view rectangle follows the screen's aspect, so a client flipping between a very wide and a very
+ * tall window every frame would be sent both views and see a square of the wider side all around its coin.
+ */
+export const VIEWPORT_MIN_MS = 3_000;
 /** The game's WebSocket subprotocol: the server answers with it (never with the token one). */
 const SUBPROTOCOL = 'coinnibal';
 /** A browser may offer its session token as a WebSocket subprotocol `coinnibal.auth.<token>` (no token in the URL). */
@@ -844,9 +850,31 @@ export class Gateway {
     });
     ws.on('close', () => {
       clearTimeout(helloTimer);
+      if (conn.aspectTimer) clearTimeout(conn.aspectTimer);
       this.onClose(conn, net);
     });
     ws.on('error', () => {});
+  }
+
+  /** A new screen aspect for the socket's view: now, or when its turn comes (`VIEWPORT_MIN_MS`). */
+  private viewport(conn: Conn, aspect: number): void {
+    conn.pendingAspect = aspect;
+    if (conn.aspectTimer) return;
+    const apply = () => {
+      conn.aspectTimer = null;
+      const a = conn.pendingAspect;
+      conn.pendingAspect = null;
+      if (a === null || a === conn.aspect || conn.ws.readyState > 1) return;
+      conn.aspectAt = Date.now();
+      conn.aspect = a;
+      conn.room?.connChanged?.(conn);
+    };
+    const wait = conn.aspectAt + VIEWPORT_MIN_MS - Date.now();
+    if (wait <= 0) apply();
+    else {
+      conn.aspectTimer = setTimeout(apply, wait);
+      conn.aspectTimer.unref?.();
+    }
   }
 
   /** A strike against the connection (see `Conn.strike`): closed once it floods or speaks garbage for long. */
@@ -1049,10 +1077,7 @@ export class Gateway {
       case 'viewport': {
         const w = Number(msg.w);
         const h = Number(msg.h);
-        if (w > 0 && h > 0 && Number.isFinite(w / h)) {
-          conn.aspect = clamp(w / h, 0.3, 3);
-          conn.room?.connChanged?.(conn);
-        }
+        if (w > 0 && h > 0 && Number.isFinite(w / h)) this.viewport(conn, clamp(w / h, 0.3, 3));
         return;
       }
       case 'chat':

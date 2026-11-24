@@ -36,6 +36,10 @@ export class Conn implements RoomConn {
   /** Last place the camera was (used while dead / spectating nobody). */
   lastCenter = { x: 0, y: 0 };
   aspect = 16 / 9;
+  /** When `aspect` last changed, and a newer one waiting for its turn (`Gateway.viewport`, `VIEWPORT_MIN_MS`). */
+  aspectAt = -Infinity;
+  pendingAspect: number | null = null;
+  aspectTimer: ReturnType<typeof setTimeout> | null = null;
   wallet: string | null = null;
   /** The page's `Origin` at the upgrade (an open-play copy of the site opens the game on a testnet); null without one. */
   origin: string | null = null;

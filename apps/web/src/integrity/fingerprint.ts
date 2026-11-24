@@ -13,7 +13,11 @@ const KEY = storageKey('device.v1');
 let value: string | null = null;
 let started = false;
 
-function installId(): string {
+/**
+ * Null when this browser keeps no storage: the settings alone are the same on every phone of one model, language and
+ * time zone, and would make strangers look like one browser to the multi-account check.
+ */
+function installId(): string | null {
   try {
     let id = localStorage.getItem(KEY);
     if (!id || !/^[0-9a-f]{32}$/.test(id)) {
@@ -24,12 +28,14 @@ function installId(): string {
     }
     return id;
   } catch {
-    return 'no-storage';
+    return null;
   }
 }
 
 async function compute(): Promise<string | null> {
   if (typeof crypto === 'undefined' || !crypto.subtle) return null;
+  const id = installId();
+  if (!id) return null;
   let tz = '';
   try {
     tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? '';
@@ -37,7 +43,7 @@ async function compute(): Promise<string | null> {
     /* ignore */
   }
   const parts = [
-    installId(),
+    id,
     navigator.language ?? '',
     tz,
     typeof screen === 'undefined' ? '' : `${screen.width}x${screen.height}@${Math.round((window.devicePixelRatio || 1) * 100)}`,
