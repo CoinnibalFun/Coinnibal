@@ -1566,6 +1566,16 @@ export class Gateway {
         this.error(conn, 'banned', 'This wallet is banned from paid arenas after an integrity review. Practice is open.');
         return;
       }
+      if (!code && !test) {
+        // joins that came back from their awaits together all confirmed the same instance: the seat is taken now,
+        // synchronously, where it is still free (a join storm fills an instance to its seats, then opens the next)
+        room = this.rooms.seatArenaNow(target.arenaId, room);
+        if (!room) {
+          this.seatRefused(wallet, target.arenaId);
+          this.error(conn, 'room_full', 'Arena is full — try again in a moment.');
+          return;
+        }
+      }
       if (conn.player?.alive) conn.room?.leave(conn, 'switch');
       room.join(conn, {
         name,

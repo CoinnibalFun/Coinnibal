@@ -852,6 +852,22 @@ export class RoomManager {
     return live(again) ? again : null;
   }
 
+  /**
+   * The seat itself, synchronous: called right before `join`, with nothing awaited in between. Joins whose last awaits
+   * resolve in the same tick (a join storm whose ticket reads were merged into one multicall) all confirmed the same
+   * instance before any of them sat down; checked again here, each takes the seat that is really free (the instance,
+   * or the next one `ArenaScaler.seatFor` gives, a new instance included). Null when the arena has no seat now.
+   */
+  seatArenaNow(arenaId: number, room: RoomHandle): RoomHandle | null {
+    const live = (r: RoomHandle | null): r is RoomHandle => r !== null && this.get(r.id) === r && this.scaler.seatable(r);
+    if (live(room)) return room;
+    if (!this.arenaAllowed(arenaId) || this.underfunded.has(arenaId)) return null;
+    const again = this.scaler.seatFor(arenaId);
+    if (!live(again)) return null;
+    again.lastActivity = Date.now();
+    return again;
+  }
+
   /** What a running instance knows of its arena (its ticket price), for when the chain cannot be read. */
   private arenaFromRooms(arenaId: number): ArenaData | null {
     const first = this.arenaInstances(arenaId)[0];
