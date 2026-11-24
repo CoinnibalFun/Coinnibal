@@ -44,7 +44,7 @@ export interface ArenaScalingSettings {
 export const ARENA_SCALING_DEFAULT: ArenaScalingSettings = {
   enabled: true,
   minInstances: 1,
-  maxInstances: 6,
+  maxInstances: 30,
   fullHits: 3,
   windowMin: 10,
   highPct: 80,
@@ -57,7 +57,7 @@ export const ARENA_SCALING_DEFAULT: ArenaScalingSettings = {
 /** Bounds of the admin values (whole numbers). */
 export const ARENA_SCALING_LIMITS: Record<Exclude<keyof ArenaScalingSettings, 'enabled'>, readonly [number, number]> = {
   minInstances: [1, 10],
-  maxInstances: [1, 20],
+  maxInstances: [1, 40],
   fullHits: [1, 50],
   windowMin: [1, 120],
   highPct: [10, 100],
