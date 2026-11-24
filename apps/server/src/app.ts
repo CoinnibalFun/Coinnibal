@@ -21,7 +21,7 @@ import { ArenaScalingStore } from './rooms/arena-scaler';
 import { TestArenaStore } from './rooms/test-arenas';
 import { MapSettingsStore } from './rooms/map-settings';
 import { ShareService } from './site/shares';
-import { shareCardSelfCheck } from './site/share-card';
+import { createCardRenderer } from './site/card-renderer';
 import { viemHolderReader, type HolderReader } from './chain/evm-client';
 import { configureRpcBudgetFor, configureRpcBudgets, startRpcMinuteLog } from './chain/rpc-budget';
 import { loadServerKeySecret } from './chain/server-key';
@@ -294,8 +294,12 @@ export async function createApp(
   });
   if (cfg.devFakeChain && process.env.DEV_FAKE_X === '1') log('x-links: DEV_FAKE_X=1, X is faked (dev stack only)');
   site.setXLinks(xLinks);
+  // the card pictures (share and Appetizer cards) are drawn in card worker threads (`CARD_WORKERS`, 0: here)
+  const cardRenderer = createCardRenderer(cfg.cardWorkers, log);
+  site.appetizers.setRenderer(cardRenderer);
   // "Share on X": cards of results and kills, made from the server's own records (DATA_DIR/site/shares.json)
   const shares = new ShareService({
+    renderer: cardRenderer,
     dataDir: persist ? cfg.dataDir : null,
     baseUrl: (req) => publicBaseUrl(cfg, req),
     token: () => {
@@ -305,14 +309,16 @@ export async function createApp(
     xLinked: (handle) => xLinks.links.linkedHandle(handle),
     log,
   });
-  // the native canvas addon draws the share cards: checked once at startup (the server runs without it)
-  const cards = shareCardSelfCheck();
-  if (cards.ok) log('share cards: @napi-rs/canvas ready');
-  else {
-    shares.setRenderBroken(cards.error);
-    site.appetizers.setRenderBroken(cards.error);
-    log(`!!! share cards: @napi-rs/canvas cannot draw here (${cards.error}) — share images fall back to the site's picture; everything else works`);
-  }
+  // the native canvas addon draws the share cards: checked once at startup, where the cards are drawn (the server
+  // runs without it); a card asked for before the answer is drawn, or falls back if drawing fails
+  void cardRenderer.selfCheck().then((cards) => {
+    if (cards.ok) log(`share cards: @napi-rs/canvas ready (${cfg.cardWorkers > 0 ? `${cfg.cardWorkers} card worker${cfg.cardWorkers > 1 ? 's' : ''}` : 'on the main thread'})`);
+    else {
+      shares.setRenderBroken(cards.error);
+      site.appetizers.setRenderBroken(cards.error);
+      log(`!!! share cards: @napi-rs/canvas cannot draw here (${cards.error}) — share images fall back to the site's picture; everything else works`);
+    }
+  });
   const rooms = new RoomManager(
     cfg,
     {
@@ -569,6 +575,7 @@ export async function createApp(
       profiles.flush();
       shares.flush();
       site.appetizers.flush();
+      await cardRenderer.close();
       gateway.close();
       await chain.stop().catch(() => {});
       server.closeAllConnections();

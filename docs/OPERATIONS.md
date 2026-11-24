@@ -833,7 +833,10 @@ stamped TEST and never shows a payout. Kill and death cards are offers held in m
 saved only when their page is first opened (a picture fetch does not save one); saved cards live in
 `DATA_DIR/site/shares.json` (the newest 5,000). The images (`/share/<id>.png`, and `/share/<id>/standings.png` for a
 result: the top 10 of its final board and the player's own row) are rendered on demand and cached (30 renders per IP
-a minute). The VPS serves the site and the game on one origin, so `/share/*` is the server's own; `pnpm dev` proxies
+a minute, 120 in all). They are drawn in a card worker thread (`CARD_WORKERS`, default 1, at most 4; 0 draws on the
+main thread), so a burst of share images no longer stalls the game: at most 32 cards wait for a worker (past it a
+429, try again in 5 s); the log says `share cards: @napi-rs/canvas ready (1 card worker)` at startup, or why the images
+fall back to the site's picture (ARCHITECTURE.md, "Card workers"). The VPS serves the site and the game on one origin, so `/share/*` is the server's own; `pnpm dev` proxies
 it. (`vercel.json` now only redirects the old elymum.io to coinnibal.fun, path and all.)
 
 ## Player feedback

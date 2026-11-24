@@ -17,8 +17,11 @@ describe('production bundle (tsup)', () => {
     mkdirSync(join(__dirname, '../node_modules/.cache'), { recursive: true });
     const outDir = mkdtempSync(join(__dirname, '../node_modules/.cache/bundle-test-'));
     try {
-      const opts = (Array.isArray(config) ? config[0] : config) as object;
-      await build({ ...opts, entry: [join(__dirname, '../src/index.ts')], outDir, sourcemap: false, clean: false, silent: true });
+      const opts = (Array.isArray(config) ? config[0] : config) as { entry: Record<string, string> };
+      // every entry the image ships: the server, the room worker and the card worker (dist/card-worker.js)
+      const entry = Object.fromEntries(Object.entries(opts.entry).map(([k, v]) => [k, join(__dirname, '..', v)]));
+      expect(Object.keys(entry)).toEqual(['index', 'room-worker', 'card-worker']);
+      await build({ ...opts, entry, outDir, sourcemap: false, clean: false, silent: true });
       const child = spawn(process.execPath, [join(outDir, 'index.js')], {
         cwd: outDir,
         env: {
@@ -50,8 +53,9 @@ describe('production bundle (tsup)', () => {
       expect(log).toMatch(/Coinnibal server on/);
       expect(log).not.toMatch(/failed to initialise|Dynamic require|ReferenceError/);
       expect(log).toMatch(/chain: server key 0x[0-9a-fA-F]{40}/);
-      // the native canvas addon loads from the bundle (share cards), checked at startup
-      expect(log).toMatch(/share cards: @napi-rs\/canvas ready/);
+      // the native canvas addon loads in the bundled card worker (share cards), checked at startup
+      expect(log).toMatch(/share cards: @napi-rs\/canvas ready \(1 card worker\)/);
+      expect(log).not.toMatch(/card worker:|room worker \d+ stopped/);
       // the gateway itself loaded; the RPC URL is logged redacted (it may carry an API key in its path or query)
       expect(log).toMatch(/chain: RPC http:\/\/127\.0\.0\.1:1\/<redacted> unreachable/);
     } finally {
