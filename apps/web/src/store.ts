@@ -137,6 +137,11 @@ export interface RoundResult {
   stats: DeathStats | null;
   /** Top stakers at the bell (`round` only); `you` marks this player. */
   standings: RoundStanding[];
+  /**
+   * The room the game was played in. The live `room` moves on while the receipt is up (a reconnect or a server
+   * restart spectates another room), so the receipt, its share line and "Next round" read this one.
+   */
+  room?: RoomInfo | null;
 }
 
 export interface Toast {
@@ -199,7 +204,8 @@ export interface UiState {
   /** Local clock (`Date.now`) at which each bought power-up is ready again (cooldown rings). */
   boostReady: Record<BoostKind, number>;
   banner: { kind: 'coinrain' | 'airdrop'; until: number; text?: string } | null;
-  death: { stats: DeathStats; killer: string | null; killerSkin: number | null } | null;
+  /** `room`: where I was eaten (the live `room` moves on after a reconnect; "Start over" buys this arena's ticket). */
+  death: { stats: DeathStats; killer: string | null; killerSkin: number | null; room?: RoomInfo | null } | null;
   /**
    * A paid game that ended with a payout: `round` at the bell (`roundOver`, with the room's
    * standings), `exit` when the operator ended it (an admin kick or a server shutdown pays

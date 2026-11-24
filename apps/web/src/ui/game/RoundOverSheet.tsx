@@ -60,7 +60,9 @@ export function RoundOverSheet() {
   const t = useT();
   const tf = useTokenFormat();
   const res = useUi((s) => s.roundResult);
-  const room = useUi((s) => s.room);
+  // the room this game was played in (the live one moves on when a reconnect spectates elsewhere)
+  const liveRoom = useUi((s) => s.room);
+  const room = res?.room ?? liveRoom;
   const ticket = useUi((s) => s.ticket);
   const chain = useUi((s) => s.chain);
   const settledRaw = useUi((s) => s.lastSettlement);
