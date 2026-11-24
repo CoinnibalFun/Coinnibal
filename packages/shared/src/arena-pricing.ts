@@ -56,6 +56,9 @@ export const ARENA_PRICING_DEFAULT: ArenaPricingSettings = {
   sigFigs: 2,
 };
 
+/** Decimals of the game server's ledger units (SDK `LEDGER_MAX_DECIMALS`; the shared package does not import the SDK). */
+const LEDGER_DECIMALS = 6;
+
 /** The largest entry fee `CoinnibalArena` can store (`uint128`). */
 const MAX_UINT128 = (1n << 128n) - 1n;
 
@@ -275,6 +278,13 @@ export function arenaPriceDiff(p: {
       else {
         try {
           newEntry = usdToTokenRaw(t.usdCents, p.price, p.decimals, p.sigFigs);
+          // the game server keeps ticket values with at most 6 decimals (SDK `ledgerUnitScale`): an entry fee below that
+          // precision would be booked rounded down, and the rest of every ticket would stay in the vault for good
+          const unit = 10n ** BigInt(Math.max(0, p.decimals - LEDGER_DECIMALS));
+          if (newEntry % unit !== 0n) {
+            error = `the entry fee ${newEntry} has more than ${LEDGER_DECIMALS} decimals of the token (the game keeps ${LEDGER_DECIMALS}): use fewer significant figures`;
+            newEntry = null;
+          }
         } catch (err) {
           error = (err as Error).message;
         }

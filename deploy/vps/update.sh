@@ -51,7 +51,7 @@ mkdir -p "$COINNIBAL_STATE" "$(dirname "$COINNIBAL_LOCK")"
 exec 9>"$COINNIBAL_LOCK"
 if [[ "$refresh" -eq 1 ]]; then
   # the weekly refresh waits its turn (skipped, it would wait a whole week)
-  flock -w 1800 9 || die "another Coinnibal job held the lock for 30 minutes; no refresh now"
+  flock -w 7200 9 || die "another Coinnibal job held the lock for 2 hours; no refresh now"
 elif ! flock -n 9; then
   log "another Coinnibal job (update, backup or install) is running; skipping this check"
   exit 0

@@ -103,9 +103,16 @@ export class ShareService {
     const p = this.file();
     if (!p || !this.dirty) return;
     this.dirty = false;
-    mkdirSync(join(this.d.dataDir!, 'site'), { recursive: true });
-    writeFileSync(`${p}.tmp`, JSON.stringify({ v: 1, cards: [...this.cards.values()] }));
-    renameSync(`${p}.tmp`, p);
+    // a full or failing disk must not throw out of a save timer (an uncaught exception stops the server): the cards
+    // stay in memory, marked dirty, and the next save tries again
+    try {
+      mkdirSync(join(this.d.dataDir!, 'site'), { recursive: true });
+      writeFileSync(`${p}.tmp`, JSON.stringify({ v: 1, cards: [...this.cards.values()] }));
+      renameSync(`${p}.tmp`, p);
+    } catch (err) {
+      this.dirty = true;
+      console.warn(`shares: could not save (${(err as Error)?.message ?? err}); kept in memory, retried at the next save`);
+    }
   }
 
   private newId(): string {

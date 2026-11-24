@@ -18,11 +18,11 @@ KEEP="${KEEP:-14}"
 mkdir -p "$COINNIBAL_BACKUPS" "$(dirname "$COINNIBAL_LOCK")"
 chmod 700 "$COINNIBAL_BACKUPS"
 
-# wait (at most 30 min) for a running deploy to finish instead of skipping the day
+# wait (at most 2 h: a deploy may wait out a paid ticket room first) for a running deploy to finish instead of skipping the day
 # (restore.sh already holds it when it asks for a safety backup)
 if [[ "$COINNIBAL_LOCK_HELD" != "1" ]]; then
   exec 9>"$COINNIBAL_LOCK"
-  flock -w 1800 9 || die "another Coinnibal job held the lock for 30 minutes; no backup today"
+  flock -w 7200 9 || die "another Coinnibal job held the lock for 2 hours; no backup today"
 fi
 
 docker volume inspect "$COINNIBAL_VOLUME" >/dev/null 2>&1 || die "volume $COINNIBAL_VOLUME does not exist (is the server installed?)"

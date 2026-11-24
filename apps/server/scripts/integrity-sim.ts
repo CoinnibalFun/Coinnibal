@@ -28,6 +28,12 @@ export interface SimOptions {
   honest?: number;
   /** Scripted bots: perfectly periodic input aimed at exact points (default 0). */
   scripted?: number;
+  /**
+   * Honest stakers who steer with the move keys (WASD / arrows) like the web client's `KeySteer`: one of eight
+   * directions held at a time, the aim at the client's (interpolated, slightly late) coin plus that direction at full
+   * reach (default 0).
+   */
+  keyboard?: number;
   /** Attach the integrity telemetry (default true). */
   integrity?: boolean;
   /** Round length (default 60 s, joins close 15 s before the bell). */
@@ -68,6 +74,10 @@ interface Client {
   wallet: string;
   conn: Conn;
   scripted: boolean;
+  /** Steers with the move keys (`SimOptions.keyboard`). */
+  keyboard: boolean;
+  /** The coin's centre as the client last drew it (its snapshots run about 100 ms behind, plus the latency). */
+  drawn: { x: number; y: number }[];
   brain: BotBrain;
   /** Base one-way latency (ms) and its jitter. */
   latency: number;
@@ -103,10 +113,12 @@ export function runIntegritySim(o: SimOptions = {}): SimResult {
   let sessionSeq = 0;
   let tickets = 0;
   const clients: Client[] = [];
-  const mk = (i: number, scripted: boolean): Client => ({
-    wallet: `${scripted ? 'Script' : 'Honest'}Wallet${i}`,
-    conn: fakeConn(`${scripted ? 'Script' : 'Honest'}Wallet${i}`, `10.${scripted ? 9 : 1}.${i >> 8}.${i & 255}`),
+  const mk = (i: number, scripted: boolean, keyboard = false): Client => ({
+    wallet: `${scripted ? 'Script' : keyboard ? 'Keys' : 'Honest'}Wallet${i}`,
+    conn: fakeConn(`${scripted ? 'Script' : keyboard ? 'Keys' : 'Honest'}Wallet${i}`, `10.${scripted ? 9 : keyboard ? 5 : 1}.${i >> 8}.${i & 255}`),
     scripted,
+    keyboard,
+    drawn: [],
     // the practice-bot brain stands in for an honest person's intent (it sees only what a person would)
     brain: new BotBrain('normal', rng, 0, HUMAN_PROXY_TUNING),
     latency: 15 + rng() * 90,
@@ -123,6 +135,7 @@ export function runIntegritySim(o: SimOptions = {}): SimResult {
   });
   for (let i = 0; i < (o.honest ?? 12); i++) clients.push(mk(i, false));
   for (let i = 0; i < (o.scripted ?? 0); i++) clients.push(mk(i, true));
+  for (let i = 0; i < (o.keyboard ?? 0); i++) clients.push(mk(i, false, true));
   for (const c of clients) {
     c.conn.fp = (c.scripted ? 'b' : 'a').repeat(8) + (clients.indexOf(c) + 1).toString(16).padStart(24, '0');
   }
@@ -197,6 +210,24 @@ export function runIntegritySim(o: SimOptions = {}): SimResult {
           if (d.split) send(c, { op: ClientOp.Split }, ft);
         }
         const goal = c.goal ?? center;
+        if (c.keyboard) {
+          // the keys: the goal's direction rounded to one of eight, held; the aim is the drawn coin plus it at full reach
+          c.drawn.push({ x: center.x, y: center.y });
+          const lag = Math.max(1, Math.round((100 + c.latency) / (TICK_MS / 2)));
+          if (c.drawn.length > lag + 1) c.drawn.splice(0, c.drawn.length - lag - 1);
+          const seen = c.drawn[0];
+          const ang = Math.round(Math.atan2(goal.y - center.y, goal.x - center.x) / (Math.PI / 4)) * (Math.PI / 4);
+          let maxR = 0;
+          for (const cell of p.cells) maxR = Math.max(maxR, cell.r);
+          const reach = Math.max(260, maxR * 3);
+          const aim = { x: seen.x + Math.cos(ang) * reach, y: seen.y + Math.sin(ang) * reach };
+          const moved = Math.hypot(aim.x - c.lastSentAim.x, aim.y - c.lastSentAim.y) > 1.5;
+          if (ft - c.lastSent < 33 || (!moved && ft - c.lastSent < 250)) continue;
+          c.lastSent = ft;
+          c.lastSentAim = aim;
+          send(c, { op: ClientOp.Target, x: aim.x, y: aim.y }, ft);
+          continue;
+        }
         // the mouse sits at an offset from the coin on screen: it eases toward the goal with hand jitter
         const off = c.mouse ?? { x: goal.x - center.x, y: goal.y - center.y };
         const want = { x: goal.x - center.x, y: goal.y - center.y };

@@ -8,6 +8,7 @@ Requires=docker.service
 [Service]
 Type=oneshot
 ExecStart=/opt/elymum/deploy/vps/backup.sh
-TimeoutStartSec=1h
+# up to 2 h waiting for the lock (a deploy waiting out a paid ticket room), then the tar
+TimeoutStartSec=3h
 Nice=10
 IOSchedulingClass=idle

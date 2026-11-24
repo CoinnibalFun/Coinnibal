@@ -250,11 +250,16 @@ export class ProfileStore {
     }
     if (!this.path || !this.dirty) return;
     const data: ProfilesFile = { version: 1, profiles: [...this.byWallet.values()] };
-    mkdirSync(dirname(this.path), { recursive: true });
-    const tmp = `${this.path}.tmp`;
-    writeFileSync(tmp, JSON.stringify(data));
-    renameSync(tmp, this.path);
-    this.dirty = false;
+    // a full or failing disk must not throw out of a save timer (an uncaught exception stops the server)
+    try {
+      mkdirSync(dirname(this.path), { recursive: true });
+      const tmp = `${this.path}.tmp`;
+      writeFileSync(tmp, JSON.stringify(data));
+      renameSync(tmp, this.path);
+      this.dirty = false;
+    } catch (err) {
+      console.warn(`profiles: could not save (${(err as Error)?.message ?? err}); kept in memory, retried at the next save`);
+    }
   }
 }
 

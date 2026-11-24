@@ -16,7 +16,7 @@ import {
 import type { Player } from '../game/entities';
 import { csv } from '../site/store';
 import type { Journal, SettlementItem } from '../stake/journal';
-import { runDetectors, scopeSnapshot, walletRisk, type Candidate } from './detectors';
+import { detectBellAbuse, runDetectors, scopeSnapshot, walletRisk, type Candidate } from './detectors';
 import { applySettingsPatch } from './settings';
 import type { IntegrityState, IntegrityStore } from './store';
 import { IntegrityMonitor, type MonitorRoom } from './telemetry';
@@ -26,6 +26,12 @@ const DAY = 86_400_000;
 /** A flag that was reviewed or dismissed opens again when its score rises by this much. */
 const REOPEN_RISE = 20;
 const MAX_FLAGS = 5000;
+/**
+ * Hold decisions this close together (ms, monotonic) share one detector run over the whole window: a bell settles
+ * every ticket of every instance in the same moment, and one decision per ticket over a full window took tens of
+ * milliseconds each (seconds of main thread at a bell of a few hundred winners).
+ */
+const HOLD_BURST_MS = 3000;
 
 export interface IntegrityOptions {
   store: IntegrityStore;
@@ -85,6 +91,13 @@ export class IntegrityService {
   private readonly windowMs: number;
   private readonly maxSessions: number;
   private readonly maxTransfers: number;
+  private readonly mono: () => number;
+  /**
+   * When the last hold decision ran (`mono`), and the detector run a burst of them shares (`evaluate`), with the
+   * wallets of every transfer added since it was made (their decisions run on their own again).
+   */
+  private lastEvalAt = -Infinity;
+  private burst: { at: number; settings: IntegritySettings; cands: Candidate[]; since: Set<string> } | null = null;
 
   constructor(private readonly opts: IntegrityOptions) {
     this.log = opts.log ?? (() => {});
@@ -92,6 +105,7 @@ export class IntegrityService {
     this.windowMs = (opts.windowDays ?? 7) * DAY;
     this.maxSessions = opts.maxSessions ?? 20_000;
     this.maxTransfers = opts.maxTransfers ?? 60_000;
+    this.mono = opts.mono ?? (() => performance.now());
     this.state = opts.store.loadState();
     for (const f of this.state.flags) this.flags.set(f.id, f);
     for (const b of this.state.bans) this.bans.set(b.wallet, b);
@@ -117,6 +131,10 @@ export class IntegrityService {
   }
 
   private addTransfer(t: IntegrityTransfer): void {
+    if (this.burst) {
+      this.burst.since.add(t.from);
+      this.burst.since.add(t.to);
+    }
     this.transfers.push(t);
     this.unsaved.transfers.push(t);
     if (this.transfers.length > this.maxTransfers + 1000) this.transfers.splice(0, this.transfers.length - this.maxTransfers);
@@ -301,12 +319,38 @@ export class IntegrityService {
   }
 
   /**
-   * Risk of one wallet now: the detectors over the part of the window that concerns it (cheap enough
-   * for a bell with many settlements). Dismissed flags do not count.
+   * Risk of one wallet now: the detectors over the part of the window that concerns it, or, in a burst of
+   * decisions (a bell), one run over the whole window shared by the burst (`HOLD_BURST_MS`). Dismissed flags do
+   * not count.
    */
   evaluate(wallet: string): { score: number; flags: string[] } {
-    const cands = runDetectors(scopeSnapshot(this.snapshot(), wallet), this.state.settings.thresholds);
-    this.merge(cands);
+    const th = this.state.settings.thresholds;
+    const t = this.mono();
+    let cands: Candidate[];
+    const burst = this.burst && t - this.burst.at <= HOLD_BURST_MS && this.burst.settings === this.state.settings ? this.burst : null;
+    if (!burst) this.burst = null;
+    if (burst && !burst.since.has(wallet)) {
+      // a bell: the whole window was run a moment ago, and no value moved to or from this wallet since. Only its own
+      // ticket that just ended is newer (bell abuse reads ended tickets only): that detector runs again over the
+      // wallet's own finished tickets.
+      const own: SessionSummary[] = [];
+      for (const s of this.sessions.values()) if (s.wallet === wallet) own.push(s);
+      const bell = detectBellAbuse({ now: this.now(), sessions: own, transfers: [] }, th).filter((c) => c.score >= th.flagMinScore);
+      this.merge(bell);
+      cands = [...burst.cands.filter((c) => !(c.kind === 'bell_abuse' && c.wallets.includes(wallet))), ...bell];
+    } else if (!burst && t - this.lastEvalAt <= HOLD_BURST_MS) {
+      // the second decision in a row: a bell settles every ticket of every instance at once, and each scoped run
+      // costs a large part of a full one (a wallet's counterparties, rooms and networks reach most of the window),
+      // so the rest of the burst shares one run over the whole window
+      cands = runDetectors(this.snapshot(), th);
+      this.merge(cands);
+      this.burst = { at: t, settings: this.state.settings, cands, since: new Set() };
+    } else {
+      // on its own, or value moved for this wallet since the burst's run: the part of the window that concerns it
+      cands = runDetectors(scopeSnapshot(this.snapshot(), wallet), th);
+      this.merge(cands);
+    }
+    this.lastEvalAt = t;
     const live = cands.filter((c) => this.flags.get(c.id)?.status !== 'dismissed');
     return walletRisk(wallet, live);
   }
