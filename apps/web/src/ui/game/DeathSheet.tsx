@@ -23,7 +23,9 @@ export function DeathSheet() {
   const t = useT();
   const tf = useTokenFormat();
   const death = useUi((s) => s.death);
-  const room = useUi((s) => s.room);
+  // the room I was eaten in (the live one moves on when a reconnect spectates elsewhere)
+  const liveRoom = useUi((s) => s.room);
+  const room = death?.room ?? liveRoom;
   const me = useUi((s) => s.me);
   const signedIn = useUi((s) => s.auth !== null);
   const dead = useUi((s) => s.screen === 'dead' && s.death !== null);
