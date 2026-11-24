@@ -28,7 +28,7 @@ import {
   updateArenaRefusal,
 } from '@coinnibal/sdk/ops';
 import { sameAddress } from '@coinnibal/sdk';
-import { BPS, MAX_TOTAL_FEE_BPS, feeExample, GAS_SYMBOL } from '@coinnibal/shared';
+import { BPS, DEFAULT_ARENAS, MAX_TOTAL_FEE_BPS, feeExample, GAS_SYMBOL } from '@coinnibal/shared';
 import { useState } from 'react';
 import type { Address } from 'viem';
 import { DefaultArenas, SetTokenForm } from './DeployTab';
@@ -200,7 +200,7 @@ function ArenaEdit({ ctx, open }: { ctx: ChainCtx; open: OpenFn }) {
   const arena = ctx.net.arenaAddress!;
   const [id, setId] = useState(String(a.arenas[0]?.id ?? 5));
   const [fee, setFee] = useState('');
-  const [max, setMax] = useState('300');
+  const [max, setMax] = useState(String(DEFAULT_ARENAS[0].maxSessions));
   const [enabled, setEnabled] = useState(true);
   const [err, guard] = useFormError();
   const existing = a.arenas.filter((x) => x.exists).map((x) => x.id);

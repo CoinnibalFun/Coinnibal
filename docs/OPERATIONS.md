@@ -202,7 +202,7 @@ demand with **Run detectors now**). Each flag has a score from 0 to 100 and its 
 | Pair transfer | wallet B took value from wallet A on at least 4 occasions in 3+ rounds, net 2+ entry fees, and the chance of that is at most 1 in 10,000. The null model uses B's own eating rate against everyone else, so a strong player is not mistaken for a partner. An idle eater raises the score |
 | Eject feeding | at least 40 of A's ejected blobs were eaten by other players and 70 % of them by B, over 2+ rounds (mass only, so the score is capped at 75) |
 | Suicide feeding | a much smaller A kept moving toward the same bigger B (60 % of its last 3 s) and was eaten by B, 2+ times in 2+ rounds |
-| Shared IP or browser | two wallets in one arena at the same time (30 s+) from one browser hash (60, both 80, +10 in one instance) or one IP hash (30, below the flag score: households, cafes and mobile carriers share IPs). Value moving between them adds 10 to 15 |
+| Shared IP or browser | two wallets in one arena at the same time (30 s+) from one browser hash (60, both 80, +10 in one instance) or one IP hash (30, below the flag score: households, cafes and mobile carriers share IPs). Value moving between them adds 15 to a shared browser (any amount); to a shared IP alone it adds 10 only for a net flow one way of at least `pairMinNetFees` (2 entry fees) in at least `pairMinRounds` (3) rounds, so two strangers on one carrier address where one eats the other are not flagged (the integrity simulation puts 30 of them on one IP: 0 flags; before, 20 to 30) |
 | Bot-like input | 2+ of: aim timing variation under 1 % (the web client sends on a 33 ms frame budget, so timing alone is weak), no mouse jitter (direction-change entropy at most 0.6 bits, or 95 % whole-number aims), median reaction under 110 ms over 20+ threats, play in 21+ hours of the last 24. The reaction signal alone also flags |
 | Round-bell pattern | 3+ tickets that joined in the last 20 s before joins close and sat idle (80 %+) until the bell, or that gained half an entry fee or more while idle |
 | Input twins | two wallets with automated input (the bot-like input tests) whose input statistics match (direction-change distributions within 0.02 bits, the same timing) and that played the same room at the same time in 2+ rounds: one script, several accounts. Only automated wallets are compared, so people never match; the score (60 to 75) stays below the hold score on its own |
@@ -374,10 +374,10 @@ that is a repeated no-show (`no_show`, "from your network"), one with its share 
   permits never refuse anyone.
 - **The new wallets' share** (round 4, R3-M2). Wallets without standing together hold at most
   `JOIN_PERMIT_FRESH_SHARE` (0.5) of min(the arena's cap, its `maxSessions`) of the arena's permits not played yet
-  (150 of 300 by default), from however many networks they come; past it a new wallet hears "many new players are
+  (750 of 1,500 by default: the cap, 50 seats × 30 instances, equals the default 1,500 `maxSessions`), from however many networks they come; past it a new wallet hears "many new players are
   buying tickets for this room, try again in a minute". The other half stays open to players with standing. Half,
   because a launch of new players must still fill an arena: a permit is played (seated) about a minute after it is
-  asked and leaves the share then, so 300 new players fill the 300 seats within the first minutes of a round's
+  asked and leaves the share then, so new players fill the seats within the first minutes of a round's
   4-minute join window. A new wallet must also hold the entry fee (`no_funds`), so a permit that could buy nothing
   holds no share.
 - **No-shows.** A ticket the stale sweeper cancels at its entry fee because it was never seated while its arena was
@@ -416,8 +416,8 @@ that is a repeated no-show (`no_show`, "from your network"), one with its share 
 ### Security notes: what an attacker can still do with permits (residual bounds)
 
 With unbounded fresh identities nothing can be prevented entirely; the rules make an attack cost far more than it
-costs the players, and never lock out a player with standing. Defaults, one arena of 300 places (cap = `maxSessions` =
-300), a stale cycle of about 20 minutes (15 minutes plus up to 5 of sweep):
+costs the players, and never lock out a player with standing. Defaults, one arena of 300 places (cap = 300, below its
+`maxSessions` of 1,500), a stale cycle of about 20 minutes (15 minutes plus up to 5 of sweep):
 
 - **New players kept out of one arena with tickets nobody plays**: 150 unplayed tickets per cycle (the new wallets'
   share). Each wallet makes 3 no-shows a day, each IPv4 address 9 and each /24 or /48 24, and one /24 holds 16 of the
@@ -713,6 +713,19 @@ minute; the log says `arena #N: ticket price … on chain`). Re-sync whenever th
 (Finish setup does it on a fresh deploy). An arena deployed earlier with the old suggestion (1,500 + 0) needs this
 call once; tickets bought before it keep the pair they joined with.
 
+### Max open tickets per arena
+
+A fresh deploy creates each arena with **1,500** open tickets (`DEFAULT_ARENAS[*].maxSessions`; the contract allows
+2 to 2,000). It is the on-chain ceiling on tickets bought and not yet settled; the seats the server runs are the
+arena instances (`ARENA_INSTANCE_CAP` × `maxInstances`, 1,500 by default, "Arena instances"), and join permits count
+min(that cap, `maxSessions`). Arenas created earlier (300 each) **keep their on-chain value** until the owner changes
+it: `/admin` → Game → the arena contract → **Create or update an arena**: the arena id, entry fee left blank (kept), **Max open tickets**
+1500, Enabled as it is now, **Preview update**, sign. One owner transaction per arena (`updateArena(id, sameEntry,
+1500, enabled)`); allowed while tickets are open, since the entry fee does not change. The seat side: a server
+whose arena scaling was never saved in admin uses the new default `maxInstances` 30 (50 × 30 = 1,500 seats an arena);
+one that saved it keeps its value, so raise **Max instances** to 30 in admin → Game → Arena scaling too. Nothing else moves: prices,
+fees, payouts and vaults stay as they are.
+
 ## Resetting the leaderboards
 
 `/admin` → Game → Leaderboards → "Reset both leaderboards" (`POST /api/admin/leaderboards/reset` with
@@ -738,6 +751,19 @@ journaled as a sweep and sent with `sweepLoot(arenaId, sweepId, amount)`, which 
   with backoff. Check the arena in `/admin` → Game → the arena contract before doing anything.
 - `sweepLoot` is capped only by the vault (the same trust as a payout): **protect the server key**.
 - Unplayed tickets are cancelled with their full entry fee after `STALE_SESSION_AFTER_S` (15 minutes).
+
+## Map sizes
+
+Every room's square map grows with the people in it: side = base + per person × people, at most max
+(`packages/shared/src/map-scale.ts`; PROJECT.md section 2.2.2). Defaults for every room kind: base 8,000, **80 per
+person** (until 2026-11-24: 40), max 12,000: 25 people 10,000, a full arena instance (50) 12,000. Food, cacti and
+power-ups follow the area, capped at 4,000 food, 40 cacti and 6 power-up slots. `/admin` → Game → Maps changes them per
+room kind (`/api/admin/maps`, stored in `DATA_DIR/site/maps.json`).
+
+A server whose admin ever saved the map sizes has every kind written to `maps.json`, with the per-person value of
+that time: it **keeps 40 per person** after the update. To take the new default, set **Per person** to 80 for each
+kind in Game → Maps and save (applies at once; an arena takes a smaller size only at its next round start). A server
+without `maps.json` follows the new default at once.
 
 ## Custom rooms and practice with bots
 
@@ -809,7 +835,10 @@ stamped TEST and never shows a payout. Kill and death cards are offers held in m
 saved only when their page is first opened (a picture fetch does not save one); saved cards live in
 `DATA_DIR/site/shares.json` (the newest 5,000). The images (`/share/<id>.png`, and `/share/<id>/standings.png` for a
 result: the top 10 of its final board and the player's own row) are rendered on demand and cached (30 renders per IP
-a minute). The VPS serves the site and the game on one origin, so `/share/*` is the server's own; `pnpm dev` proxies
+a minute, 120 in all). They are drawn in a card worker thread (`CARD_WORKERS`, default 1, at most 4; 0 draws on the
+main thread), so a burst of share images no longer stalls the game: at most 32 cards wait for a worker (past it a
+429, try again in 5 s); the log says `share cards: @napi-rs/canvas ready (1 card worker)` at startup, or why the images
+fall back to the site's picture (ARCHITECTURE.md, "Card workers"). The VPS serves the site and the game on one origin, so `/share/*` is the server's own; `pnpm dev` proxies
 it. (`vercel.json` now only redirects the old elymum.io to coinnibal.fun, path and all.)
 
 ## Player feedback
@@ -849,7 +878,7 @@ are on. The scaler (`apps/server/src/rooms/arena-scaler.ts`, rules in
 | Setting | Default | Range |
 |---|---|---|
 | Scale ahead of demand (`enabled`; off: overflow only, and only empty extra instances close) | on | on / off |
-| `minInstances` / `maxInstances` per arena | 1 / 6 | 1..10 / 1..20 |
+| `minInstances` / `maxInstances` per arena | 1 / 30 | 1..10 / 1..40 |
 | `fullHits` in `windowMin` | 3 in 10 min | 1..50 / 1..120 |
 | `highPct` for `sustainMin` | 80 % for 2 min | 10..100 / 1..60 |
 | `lowPct` for `lowMin` | 35 % for 10 min | 0..90 / 1..240 |
@@ -938,7 +967,11 @@ is a break for it; `paidRooms` in `/api/health`, at most 70 minutes) (deploy/vps
 
 **Reconnects.** A player whose network switched comes back on a new socket while the old one still looks open: a
 join of the same signed-in wallet takes the live coin over at once, and the old socket is closed with
-`CLOSE_REPLACED` (4000) so it does not reconnect. Another wallet can never take a coin (it has no ticket there).
+`CLOSE_REPLACED` (4000) so it does not reconnect. Another wallet can never take a coin (it has no ticket there). A
+page reload (or the game reopened in a tab) mid-round comes back the same way, by itself: the sign-in answer
+(`authed.seat`) names the wallet's live coin and the page takes it back, unless another socket of the wallet plays it
+right now (then the lobby's "Resume" takes it over, and the other tab shows "Play here"). Spectators of paid rooms see
+only the followed coin's own view, and move on to the next coin at most every 3 s (anti-ghosting; ARCHITECTURE.md).
 
 **Deploys** go out only for commits CI passed (the `ci-green-<branch>` tag), in the round break, and roll back by
 themselves when the new container is not healthy within 60 s, or when Caddy does not come up after the swap (its

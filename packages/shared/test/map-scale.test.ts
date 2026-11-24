@@ -19,8 +19,18 @@ import {
 
 describe('dynamic map size: base + per person, at most max', () => {
   it('gives the documented sides for 0 / 1 / 25 / 40 / 50 / 100 / 400 people', () => {
-    expect(MAP_SCALE_DEFAULT).toEqual({ auto: true, base: 8000, perPlayer: 40, max: 12_000 });
-    expect([0, 1, 25, 40, 50, 100, 400].map((n) => mapSideFor(n, MAP_SCALE_DEFAULT))).toEqual([8000, 8040, 9000, 9600, 10_000, 12_000, 12_000]);
+    expect(MAP_SCALE_DEFAULT).toEqual({ auto: true, base: 8000, perPlayer: 80, max: 12_000 });
+    expect([0, 1, 25, 40, 50, 100, 400].map((n) => mapSideFor(n, MAP_SCALE_DEFAULT))).toEqual([8000, 8080, 10_000, 11_200, 12_000, 12_000, 12_000]);
+  });
+
+  it('keeps every default side within the population caps: a full arena instance (50) still has food for everyone', () => {
+    const full = worldForSide(mapSideFor(50, MAP_SCALE_DEFAULT));
+    expect(full.foodTarget).toBe(MAP_WORLD_CAPS.food);
+    expect(full.foodTarget / 50).toBeGreaterThanOrEqual(70);
+    expect(full.virusTarget).toBe(MAP_WORLD_CAPS.viruses);
+    expect(full.maxPowerUps).toBe(MAP_WORLD_CAPS.powerUps);
+    // food per person never falls below what the former default (40 a person) gave a full instance at 10000
+    for (let n = 1; n <= 50; n++) expect(worldForSide(mapSideFor(n, MAP_SCALE_DEFAULT)).foodTarget / n).toBeGreaterThanOrEqual(worldForSide(10_000).foodTarget / 50);
   });
 
   it('grows with every person (until max), is monotonic, stepped, and never leaves the coordinate space', () => {

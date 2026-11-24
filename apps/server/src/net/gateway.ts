@@ -1156,7 +1156,23 @@ export class Gateway {
       this.countSigned(conn);
     }
     conn.profile = this.profiles?.summary(wallet) ?? null;
-    conn.send({ t: 'authed', address: wallet, token: token ?? this.auth.issueToken(wallet), profile: conn.profile });
+    const seat = this.liveSeat(conn, wallet);
+    conn.send({ t: 'authed', address: wallet, token: token ?? this.auth.issueToken(wallet), profile: conn.profile, ...(seat ? { seat } : {}) });
+  }
+
+  /**
+   * The wallet's live arena coin, for `authed.seat`: a reloaded (or reopened) page resumes it by itself unless `held`
+   * (another socket of the wallet plays it right now: taking it over stays the player's choice, "Resume").
+   */
+  private liveSeat(conn: Conn, wallet: string): { arenaId: number; held: boolean } | null {
+    const live = this.rooms.liveStake(wallet);
+    if (!live) return null;
+    const pid = live.entry.pid;
+    let held = false;
+    for (const c of this.rooms.conns) {
+      if (c !== conn && c.room === live.room && c.player?.alive && c.player.id === pid) held = true;
+    }
+    return { arenaId: live.arenaId, held };
   }
 
   private async onJoin(conn: Conn, msg: Record<string, unknown>): Promise<void> {

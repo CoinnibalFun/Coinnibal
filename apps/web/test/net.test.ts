@@ -174,7 +174,7 @@ describe('Net: the shared close code and the subprotocols', () => {
     // signed in meanwhile: the reconnect carries the token (never in the URL)
     token = '0xAbC0000000000000000000000000000000000001.1700000000000.1690000000000.mAc_-x';
     FakeSocket.all[0].close();
-    vi.advanceTimersByTime(600);
+    vi.advanceTimersByTime(700); // past the first retry with its jitter (500 ms ±25 %)
     expect(FakeSocket.all[1].protocols).toEqual(['coinnibal', `coinnibal.auth.${token}`]);
     expect(FakeSocket.all[1].url).toBe('ws://x/ws');
     net.close();
