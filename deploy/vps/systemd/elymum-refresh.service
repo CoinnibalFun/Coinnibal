@@ -11,6 +11,7 @@ Type=oneshot
 # --scheduled: skipped while auto-deploy is paused (elymum-update.timer stopped); by hand (`coinnibal-update --refresh`)
 # it always runs, and either way it rebuilds only the deployed commit
 ExecStart=/opt/elymum/deploy/vps/update.sh --refresh --scheduled
-# a full rebuild (the build cache is pruned after a week) and the wait for the lock and the round break
-TimeoutStartSec=90min
+# a full rebuild (the build cache is pruned after a week) and the wait for the lock (2 h at most), an open paid ticket
+# room (70 min at most) and the round break
+TimeoutStartSec=4h
 Nice=5

@@ -31,7 +31,7 @@ restarts_engine() {
 }
 
 exec 9>"$COINNIBAL_LOCK"
-flock -w 1800 9 || die "another Coinnibal job held the lock for 30 minutes; no maintenance now"
+flock -w 7200 9 || die "another Coinnibal job held the lock for 2 hours; no maintenance now"
 reboot_due=0
 [[ "${1:-}" == "--force" || -f /var/run/reboot-required ]] && reboot_due=1
 # the package lists (apt's daily job refreshes them too; a failure here only means yesterday's lists)

@@ -1,7 +1,7 @@
 import type { GasRunway } from '@coinnibal/shared';
 import type { ChainGateway } from './chain/types';
 import type { ServerConfig } from './config';
-import type { RoomManager } from './rooms/manager';
+import { isPaidCustom, type RoomManager } from './rooms/manager';
 import type { Journal } from './stake/journal';
 
 /** Due, unheld settlements beyond this many: the queue is not keeping up (`HEALTH_MAX_PENDING`). */
@@ -34,6 +34,12 @@ export interface HealthReport {
   gas: GasRunway | null;
   /** Arenas whose payouts the books guard stopped (id and why). */
   booksGuard: { arenaId: number; why: string }[];
+  /**
+   * Paid custom ticket rooms open now: they play on their own clock, so an arena round break is no break for them.
+   * `endsAt`: the latest one's end (Unix ms; its own bell settles every ticket there). The deploy and reboot jobs wait
+   * for it before they stop the server (deploy/vps/lib.sh `wait_for_round_break`). Not a reason for a 503.
+   */
+  paidRooms: { open: number; endsAt: number | null };
 }
 
 /**
@@ -82,6 +88,9 @@ export function healthReport(d: {
   const books = [...(chain.booksGuard?.() ?? new Map<number, string>())].map(([arenaId, why]) => ({ arenaId, why }));
   for (const b of books) reasons.push(`arena #${b.arenaId} payouts stopped by the books guard`);
 
+  const paid = (d.rooms.customRooms?.() ?? []).filter((r) => isPaidCustom(r.opts) && !!r.opts.ownRound);
+  const paidEndsAt = paid.reduce<number | null>((m, r) => Math.max(m ?? 0, r.opts.ownRound!.endsAt), null);
+
   return {
     ok: reasons.length === 0,
     reasons,
@@ -93,5 +102,6 @@ export function healthReport(d: {
     chain: { configured, enabled: chain.enabled, reachable, lastOkS: lastOk === null ? null : Math.round((now - lastOk) / 1000), clockSkewS: skew === null ? null : Math.round(skew / 1000) },
     gas,
     booksGuard: books,
+    paidRooms: { open: paid.length, endsAt: paidEndsAt },
   };
 }
