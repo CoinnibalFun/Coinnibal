@@ -487,7 +487,18 @@ export type ServerMessage =
       blocked?: BlockedArena[];
     }
   /** `address` is the signed-in wallet, EIP-55 checksummed. */
-  | { t: 'authed'; address: string; token: string; profile: ProfileSummary | null }
+  | {
+      t: 'authed';
+      address: string;
+      token: string;
+      profile: ProfileSummary | null;
+      /**
+       * The wallet's live arena coin (mid-round, in any arena room), if it has one: a page that was reloaded (or
+       * reopened) takes it back by itself, the way a reconnect does (`join` `arena:<arenaId>`). `held`: another
+       * socket of this wallet plays it right now (another tab or window): the page does not take it over by itself.
+       */
+      seat?: { arenaId: number; held: boolean };
+    }
   | {
       t: 'joined';
       room: RoomInfo;

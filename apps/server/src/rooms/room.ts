@@ -64,6 +64,11 @@ const INTEGRITY_SAMPLE_TICKS = 2;
 /** While live values or loot changed, the journal is rewritten at most this often. */
 const JOURNAL_SNAPSHOT_MS = 1000;
 const SLEEP_AFTER_MS = 60_000;
+/**
+ * A paid room's spectator moves on to the next coin (`spectate` with `next`) at most this often: cycling through
+ * every coin at speed would map the whole arena for a player it is relayed to. Free rooms have no limit.
+ */
+export const PAID_SPECTATE_SWITCH_MS = 3_000;
 const CHAT_HISTORY = 20;
 
 /** What a room writes to the journal (the main thread's `Journal`; a room worker forwards it there). */
@@ -229,6 +234,8 @@ export class Room implements RoomHandle {
   /** Living human players → their connection (null while AFK in a stake room). */
   readonly humans = new Map<number, Conn | null>();
   private readonly afkSince = new Map<number, number>();
+  /** When each spectator of a paid room last moved on to the next coin (`PAID_SPECTATE_SWITCH_MS`). */
+  private readonly spectateSwitchAt = new WeakMap<Conn, number>();
   /** Arena rooms: value each staker lost this game (`valueLost` / `lootSpilled` in the death stats). */
   private readonly losses = new Map<number, { lost: number; spilled: number }>();
   private readonly walletOf = new Map<number, string>();
@@ -604,8 +611,15 @@ export class Room implements RoomHandle {
   }
 
   spectate(conn: Conn, next = false): void {
+    const here = conn.room === this;
     this.attach(conn);
     if (conn.player?.alive) return;
+    // a paid room: moving on to the next coin is rate-limited (the request comes too early: it is dropped)
+    if (next && this.ledger && here && conn.spectating) {
+      const at = this.now();
+      if (at - (this.spectateSwitchAt.get(conn) ?? -Infinity) < PAID_SPECTATE_SWITCH_MS) return;
+      this.spectateSwitchAt.set(conn, at);
+    }
     conn.spectating = true;
     // nobody gets to watch an invisible coin
     const ranking = this.world.ranking().filter((q) => !this.world.isInvisible(q));
@@ -1246,6 +1260,22 @@ export class Room implements RoomHandle {
     if (this.journalDirty && now - this.lastJournalAt >= JOURNAL_SNAPSHOT_MS) this.commitJournal();
   }
 
+  /**
+   * The view a player of `p` gets: `viewSize` for its mass and the screen shape, widened so every own cell fits
+   * (after a split the pieces can fly far). A paid room's spectator gets exactly this view of the coin it follows.
+   */
+  private playerViewSize(p: Player, aspect: number): { w: number; h: number } {
+    const c = p.center();
+    const size = viewSize(p.totalMass(), aspect);
+    let maxDx = 0;
+    let maxDy = 0;
+    for (const cell of p.cells) {
+      maxDx = Math.max(maxDx, Math.abs(cell.x - c.x) + cell.r);
+      maxDy = Math.max(maxDy, Math.abs(cell.y - c.y) + cell.r);
+    }
+    return { w: Math.max(size.w, maxDx * 2.2), h: Math.max(size.h, maxDy * 2.2) };
+  }
+
   private viewFor(conn: Conn): { rect: { x0: number; y0: number; x1: number; y1: number }; view: { x: number; y: number; h: number } } {
     const p = conn.player;
     let cx: number;
@@ -1255,15 +1285,7 @@ export class Room implements RoomHandle {
       const c = p.center();
       cx = c.x;
       cy = c.y;
-      size = viewSize(p.totalMass(), conn.aspect);
-      // make sure every own cell fits (after a split pieces can fly far)
-      let maxDx = 0;
-      let maxDy = 0;
-      for (const cell of p.cells) {
-        maxDx = Math.max(maxDx, Math.abs(cell.x - cx) + cell.r);
-        maxDy = Math.max(maxDy, Math.abs(cell.y - cy) + cell.r);
-      }
-      size = { w: Math.max(size.w, maxDx * 2.2), h: Math.max(size.h, maxDy * 2.2) };
+      size = this.playerViewSize(p, conn.aspect);
       conn.lastCenter = { x: cx, y: cy };
     } else {
       const target = conn.spectatePid !== null ? this.world.players.get(conn.spectatePid) : undefined;
@@ -1284,7 +1306,10 @@ export class Room implements RoomHandle {
         cx = conn.lastCenter.x;
         cy = conn.lastCenter.y;
       }
-      size = viewSize(0, conn.aspect, true);
+      if (!this.ledger) size = viewSize(0, conn.aspect, true);
+      // a paid room (anti-ghosting): a spectator (or a coin's player after its death) sees no more than a player
+      // does: the followed coin's own view, else a new coin's
+      else size = conn.spectating && t && t.alive && t.cells.length > 0 ? this.playerViewSize(t, conn.aspect) : viewSize(0, conn.aspect);
     }
     const hw = (size.w / 2) * VIEW.serverMargin;
     const hh = (size.h / 2) * VIEW.serverMargin;

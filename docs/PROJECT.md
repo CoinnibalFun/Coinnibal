@@ -67,7 +67,7 @@ explains how the game plays, how money moves, how the code is laid out and how i
 | Chat / sticker | `Enter` (the chat sits at the bottom left, see-through; a line fades after 5 s) / `1`–`8` (the switch on the sticker bar flips the page: Hype or Trash talk) | chat / sticker buttons (with a page switch) |
 | Share | "Share on X" on the top bar while playing (the shop is in the lobby only; a power-up key out of charges says so) | the same, as an icon key |
 | Full standings (everyone in the room) | hold `Tab` (closes when let go; Tab only peeks in the game view, it still moves the focus in the chat line and in panels) | tap the standings card |
-| Next player while spectating | `Q` | |
+| Next player while spectating | `Q` (in a paid room at most every 3 s; there you see what that player sees) | |
 | Close the chat or a panel | `Esc` | |
 
 ### 2.2.1 Practice bots (free custom rooms and testnet test arenas only)
@@ -137,7 +137,7 @@ explains how the game plays, how money moves, how the code is laid out and how i
 | Joins | open for the first 4:00 of play (0:30 to 4:30 of the slot); closed in the break and the final 60 s of play (`round_closed`) |
 | A ticket bought while joins are closed | held; the client joins it automatically when the next round opens (0–1.5 s jitter, up to 5 attempts) |
 | Eaten | you get 0 for that ticket; buy back in at the same fee while joins are open |
-| Disconnect (AFK) | your cells stay in the arena until they are eaten or the bell rings, so leaving is not an early exit |
+| Disconnect (AFK) | your cells stay in the arena until they are eaten or the bell rings, so leaving is not an early exit; a reconnect, a page reload or the game reopened in a tab takes the coin back by itself (not from another tab that plays it: "Resume" there) |
 | The bell | every live ticket, connected or AFK, is settled at its current value; the world resets and the next round's floor opens after the 30 s break |
 | Floor loot at the bell | collected and **burned** with `sweepLoot` |
 | Exits that still settle at the current value | admin kick and server shutdown (operator actions, not player choices) |

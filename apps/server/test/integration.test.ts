@@ -658,6 +658,39 @@ describe('server over websocket', () => {
     b.close();
   });
 
+  it('a reloaded page hears of its live coin as it signs in (authed.seat), and whether another tab plays it now', async () => {
+    const player = newWallet();
+    chain.sessions.set(`1:${player}`, session(player, { id: 61, entryFee: 20_000_000 }));
+    const token = app.auth.issueToken(player);
+    const enter = async () => {
+      const c = await Client.connect(port);
+      c.send({ t: 'hello', v: PROTOCOL_VERSION });
+      await c.wait('welcome');
+      c.send({ t: 'auth', token });
+      return { c, authed: await c.wait('authed') };
+    };
+    // a ticket on chain but no coin in play yet: nothing to resume (the lobby's own button seats it)
+    const a = await enter();
+    expect(a.authed.seat).toBeUndefined();
+    a.c.send({ t: 'join', room: 'arena:1', name: 'Reload', skin: 0 });
+    await a.c.wait('joined');
+    // a second tab while the first plays: the coin is held there (no automatic takeover)
+    const b = await enter();
+    expect(b.authed.seat).toEqual({ arenaId: 1, held: true });
+    b.c.close();
+    // the first tab reloads: its socket closes, the coin idles; the new page is told to take it back
+    a.c.close();
+    await sleep(200);
+    const r = await enter();
+    expect(r.authed.seat).toEqual({ arenaId: 1, held: false });
+    r.c.send({ t: 'join', room: 'arena:1', name: 'Reload', skin: 0 });
+    expect((await r.c.wait('joined', 2000)).value).toBe(20_000_000);
+    r.c.close();
+    await sleep(150);
+    app.journal.remove(`1:${player.toLowerCase()}:61`);
+    chain.sessions.delete(`1:${player}`);
+  });
+
   it('a reconnect of the same wallet takes the live coin over at once (no session_busy); the old socket gets CLOSE_REPLACED', async () => {
     const player = newWallet();
     chain.sessions.set(`1:${player}`, session(player, { id: 3, entryFee: 20_000_000 }));

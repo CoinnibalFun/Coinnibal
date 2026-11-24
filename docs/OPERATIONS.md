@@ -938,7 +938,11 @@ is a break for it; `paidRooms` in `/api/health`, at most 70 minutes) (deploy/vps
 
 **Reconnects.** A player whose network switched comes back on a new socket while the old one still looks open: a
 join of the same signed-in wallet takes the live coin over at once, and the old socket is closed with
-`CLOSE_REPLACED` (4000) so it does not reconnect. Another wallet can never take a coin (it has no ticket there).
+`CLOSE_REPLACED` (4000) so it does not reconnect. Another wallet can never take a coin (it has no ticket there). A
+page reload (or the game reopened in a tab) mid-round comes back the same way, by itself: the sign-in answer
+(`authed.seat`) names the wallet's live coin and the page takes it back, unless another socket of the wallet plays it
+right now (then the lobby's "Resume" takes it over, and the other tab shows "Play here"). Spectators of paid rooms see
+only the followed coin's own view, and move on to the next coin at most every 3 s (anti-ghosting; ARCHITECTURE.md).
 
 **Deploys** go out only for commits CI passed (the `ci-green-<branch>` tag), in the round break, and roll back by
 themselves when the new container is not healthy within 60 s, or when Caddy does not come up after the swap (its

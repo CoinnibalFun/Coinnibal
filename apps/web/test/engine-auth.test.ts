@@ -94,3 +94,47 @@ describe('a custom room that closes', () => {
     expect(useUi.getState().toasts.at(-1)?.text).toBe('The room creator closed this room.');
   });
 });
+
+describe('a reload (or a reopened tab) mid-round', () => {
+  const authed = (seat?: { arenaId: number; held: boolean }) => recv({ t: 'authed', address: ADDR, token: `${ADDR}.3.ok`, profile: null, ...(seat ? { seat } : {}) });
+  const joins = () => net.sent.filter((m) => m.t === 'join') as { t: string; room?: string }[];
+
+  it('takes the live coin back by itself, with no transaction (the way a reconnect does)', () => {
+    engine = new GameEngine(document.createElement('canvas'));
+    welcome();
+    authed({ arenaId: 2, held: false });
+    expect(joins()).toEqual([expect.objectContaining({ room: 'arena:2' })]);
+    // the seat comes back: the game is on
+    recv({ t: 'joined', room: { id: 'arena-2-1', mode: 'arena', name: 'A', width: 7800, height: 7800, players: 1, bots: 0, maxPlayers: 50, arenaId: 2, entryFee: 1 }, playerId: 7, name: 'me', skin: 0, value: 1, entryFee: 1 } as never);
+    expect(useUi.getState().screen).toBe('playing');
+    // a later sign-in on the same socket (the wallet hook) does not join twice
+    authed({ arenaId: 2, held: false });
+    expect(joins()).toHaveLength(1);
+  });
+
+  it('leaves a coin another tab plays alone (the lobby\'s Resume takes it over), and asks nothing without a live coin', () => {
+    engine = new GameEngine(document.createElement('canvas'));
+    welcome();
+    authed({ arenaId: 2, held: true });
+    authed();
+    expect(joins()).toHaveLength(0);
+    expect(useUi.getState().screen).toBe('lobby');
+  });
+
+  it('a coin gone meanwhile (eaten, or settled at the bell): back in the lobby with a note, no loop', () => {
+    engine = new GameEngine(document.createElement('canvas'));
+    welcome();
+    authed({ arenaId: 2, held: false });
+    recv({ t: 'error', code: 'no_session', message: 'No open ticket.' });
+    expect(useUi.getState().screen).toBe('lobby');
+    expect(joins()).toHaveLength(1);
+  });
+
+  it('never pulls a player out of a game in play', () => {
+    engine = new GameEngine(document.createElement('canvas'));
+    welcome();
+    useUi.setState({ screen: 'playing' });
+    authed({ arenaId: 2, held: false });
+    expect(joins()).toHaveLength(0);
+  });
+});

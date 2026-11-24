@@ -28,7 +28,7 @@ import { Renderer, type FrameInput } from '../render/renderer';
 import { nameTagRise } from '../render/labels';
 import { FOOD_COLORS } from '../render/sprites';
 import { MOMENTS_KEPT, toast, useUi, type ShareItem } from '../store';
-import { Camera } from './camera';
+import { Camera, watchShort } from './camera';
 import { worldCovered } from './backdrop';
 import { serverClock } from './clock';
 import { holdForBrief } from './brief';
@@ -291,6 +291,22 @@ export class GameEngine {
   }
 
   private ticketRetry: { room: string; left: number } | null = null;
+
+  /**
+   * The signed-in wallet has a live arena coin (`authed.seat`): a reloaded or reopened page takes it back by itself,
+   * the way a reconnect does, with no transaction. Not when another tab or window plays it right now (`held`: the
+   * lobby's "Resume" takes it over, and that tab hears "playing in another tab"), and never out of a game or a join
+   * already on its way (a reconnect's own reclaim included).
+   */
+  private resumeSeat(seat: { arenaId: number; held: boolean }): void {
+    const { screen, held } = useUi.getState();
+    if (seat.held || this.reclaiming || this.ticketRetry || held) return;
+    if (screen !== 'lobby' && screen !== 'spectating') return;
+    this.reclaiming = true;
+    this.wasArena = seat.arenaId;
+    // straight in (no first-play brief: the coin is out there already, idling)
+    this.sendJoin(`arena:${seat.arenaId}`);
+  }
 
   private sendJoin(room: string): void {
     const { settings, auth } = useUi.getState();
@@ -602,6 +618,7 @@ export class GameEngine {
         } catch {
           /* ignore */
         }
+        if (m.seat) this.resumeSeat(m.seat);
         return;
       }
       case 'xp': {
@@ -1198,8 +1215,9 @@ export class GameEngine {
       }
     } else {
       const v = world.serverView;
-      // lobby: the room is the front-page photo (a window in the paper), so show it wide like a spectator
-      const short = ui.screen === 'lobby' || ui.screen === 'spectating' ? this.camera.visibleShortFor(0, true) * 0.85 : this.camera.visibleShortFor(400);
+      // a paid room (arena instance, paid custom room): exactly the view the server sends (the followed coin's own,
+      // anti-ghosting); a free room's lobby and watch: wide, like a spectator (see `watchShort`)
+      const short = watchShort(this.camera, { paid: ui.room?.mode === 'arena', wide: ui.screen === 'lobby' || ui.screen === 'spectating', serverH: v.at > 0 ? v.h : null });
       if (v.at > 0) this.camera.follow(v.x, v.y, short, rdt * (ui.screen === 'lobby' ? 0.35 : 1));
     }
 
