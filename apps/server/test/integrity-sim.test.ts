@@ -14,6 +14,12 @@ describe('integrity simulation (scripts/integrity-sim.ts)', () => {
     }
   }, 180_000);
 
+  it('people who steer with the move keys (eight directions, the aim at full reach) raise no flag either', () => {
+    const r = runIntegritySim({ minutes: 4, seed: 3, honest: 6, keyboard: 4 });
+    expect(r.tickets).toBeGreaterThan(10);
+    expect(r.flags.map((f) => `${f.kind}: ${f.summary}`)).toEqual([]);
+  }, 180_000);
+
   it('scripted input among them is flagged, and only the scripts', () => {
     // seed 2: the scenario is a whole game (bots included), so what each script gets to show in
     // 4 minutes depends on the seed; with the 2026-11 squad bots seeds 1, 2, 3 and 7 let both scripts
