@@ -585,3 +585,21 @@ describe('room workers: arena instance scaling', () => {
     }
   }, 60_000);
 });
+
+describe('room workers: an idle pond being closed', () => {
+  it('takes no new practice join while its worker is asked to drop it (the player would hear room_closed)', () => {
+    const first = app.rooms.practiceRoom('rookie') as RemoteRoom;
+    expect(first).toBeInstanceOf(RemoteRoom);
+    // the idle cleanup asked the worker to drop it and has no answer yet (`WorkerPool.closeIdle`)
+    first.closing = true;
+    try {
+      const picked = app.rooms.practiceRoom('rookie');
+      expect(picked).not.toBe(first);
+      expect(picked.opts.league).toBe('rookie');
+      // nor when the connection is already in it
+      expect(app.rooms.practiceRoom('rookie', first)).not.toBe(first);
+    } finally {
+      first.closing = false;
+    }
+  });
+});

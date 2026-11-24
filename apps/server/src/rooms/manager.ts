@@ -52,6 +52,9 @@ export interface CustomRoomHooks {
 }
 
 /** A paid custom room: an invite-only arena instance (`priv-<CODE>`, mode `arena`), never matched by quick play. */
+/** A room in a worker that was asked to close (an idle cleanup) or is gone: it takes no new join. */
+const closingRemote = (r: RoomHandle): boolean => r instanceof RemoteRoom && (r.closing || r.closed);
+
 export function isPaidCustom(opts: Pick<RoomOptions, 'mode' | 'code'>): boolean {
   return opts.mode === 'arena' && !!opts.code;
 }
@@ -388,10 +391,11 @@ export class RoomManager {
    * it serves that league and has space.
    */
   practiceRoom(league: League, prefer?: RoomHandle | null): RoomHandle {
-    if (prefer && prefer.opts.mode === 'practice' && prefer.opts.league === league && !prefer.isFull) return prefer;
+    if (prefer && prefer.opts.mode === 'practice' && prefer.opts.league === league && !prefer.isFull && !closingRemote(prefer)) return prefer;
     let best: RoomHandle | null = null;
     for (const r of this.handles()) {
-      if (r.opts.mode !== 'practice' || r.opts.league !== league || r.isFull) continue;
+      // an idle pond its worker was just asked to drop takes no join (it would answer `room_closed`)
+      if (r.opts.mode !== 'practice' || r.opts.league !== league || r.isFull || closingRemote(r)) continue;
       if (!best || r.humanCount > best.humanCount) best = r;
     }
     return best ?? this.createPractice(league);
