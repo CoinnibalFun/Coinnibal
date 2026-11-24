@@ -87,14 +87,23 @@ describe('audit: integrity auto-hold at a bell (fixed)', () => {
     const now = T0 + 520 * ROUND;
     const { svc, wallets } = busyService(() => now, () => mono);
     svc.updateSettings({ autoHold: true, holdScore: 90 }, 'test');
+    // what one decision on its own costs here (scoped to its wallet), measured on this machine right now
+    let solo = 0;
+    for (let i = 0; i < 3; i++) {
+      mono += 10_000;
+      const t = performance.now();
+      svc.holdDecision(settleItem(wallets[500 + i], FEE * 2), FEE);
+      solo += (performance.now() - t) / 3;
+    }
+    mono += 10_000;
     const t0 = performance.now();
     for (let i = 0; i < 300; i++) {
       svc.holdDecision(settleItem(wallets[i], FEE * 2), FEE);
       mono += 2; // a bell settles them all within a few milliseconds of each other
     }
     const ms = performance.now() - t0;
-    // before: one scoped run per decision over most of the window, about 70 s of main thread for this bell
-    expect(ms).toBeLessThan(6_000);
+    // before: 300 decisions cost 300 scoped runs (about 70 s of main thread here); a shared run costs about ten
+    expect(ms).toBeLessThan(40 * solo);
   }, 120_000);
 
   it('a burst still holds what a scoped decision holds: a shared browser, and the ticket that just ended parked at the bell', () => {
