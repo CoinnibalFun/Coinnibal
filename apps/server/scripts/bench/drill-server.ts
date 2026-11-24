@@ -34,8 +34,26 @@ process.on('SIGTERM', () => void shutdown('SIGTERM'));
 process.on('SIGINT', () => void shutdown('SIGINT'));
 installProcessGuards(log, (why) => void shutdown(why, 1));
 
-process.on('message', (m: { t: string; index?: number }) => {
-  if (m.t === 'crash') {
+process.on('message', (m: { t: string; index?: number; scaling?: Record<string, unknown> }) => {
+  if (m.t === 'load') {
+    // the stress harness (`stress.ts`): per-thread load, the room directory and the scaler's view
+    const mem = process.memoryUsage();
+    process.send?.({
+      t: 'load',
+      load: app.rooms.loadStats({ rooms: true }),
+      rooms: app.rooms.list(),
+      scaling: app.rooms.scaler.view(),
+      shed: { level: app.shedder.level, refused: { ...app.shedder.refused } },
+      live: app.journal.live().length,
+      heapMb: Math.round(mem.heapUsed / 1e6),
+      extMb: Math.round((mem.external + mem.arrayBuffers) / 1e6),
+    });
+  } else if (m.t === 'private') {
+    process.send?.({ t: 'private', code: app.rooms.privateRoom(null)?.opts.code ?? null });
+  } else if (m.t === 'scaling') {
+    app.rooms.scaler.store.update(m.scaling ?? {});
+    process.send?.({ t: 'scaling', settings: app.rooms.scaler.settings });
+  } else if (m.t === 'crash') {
     app.rooms.pool?.crash(m.index ?? 0);
     process.send?.({ t: 'crashed', index: m.index ?? 0 });
   } else if (m.t === 'stats') {

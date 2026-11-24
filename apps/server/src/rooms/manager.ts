@@ -51,6 +51,9 @@ export interface CustomRoomHooks {
   seatable?(code: string): boolean;
 }
 
+/** A room in a worker that was asked to close (an idle cleanup) or is gone: it takes no new join. */
+const closingRemote = (r: RoomHandle): boolean => r instanceof RemoteRoom && (r.closing || r.closed);
+
 /** A paid custom room: an invite-only arena instance (`priv-<CODE>`, mode `arena`), never matched by quick play. */
 export function isPaidCustom(opts: Pick<RoomOptions, 'mode' | 'code'>): boolean {
   return opts.mode === 'arena' && !!opts.code;
@@ -388,10 +391,11 @@ export class RoomManager {
    * it serves that league and has space.
    */
   practiceRoom(league: League, prefer?: RoomHandle | null): RoomHandle {
-    if (prefer && prefer.opts.mode === 'practice' && prefer.opts.league === league && !prefer.isFull) return prefer;
+    if (prefer && prefer.opts.mode === 'practice' && prefer.opts.league === league && !prefer.isFull && !closingRemote(prefer)) return prefer;
     let best: RoomHandle | null = null;
     for (const r of this.handles()) {
-      if (r.opts.mode !== 'practice' || r.opts.league !== league || r.isFull) continue;
+      // an idle pond its worker was just asked to drop takes no join (it would answer `room_closed`)
+      if (r.opts.mode !== 'practice' || r.opts.league !== league || r.isFull || closingRemote(r)) continue;
       if (!best || r.humanCount > best.humanCount) best = r;
     }
     return best ?? this.createPractice(league);
@@ -850,6 +854,22 @@ export class RoomManager {
     }
     const again = await this.arenaRoom(arenaId);
     return live(again) ? again : null;
+  }
+
+  /**
+   * The seat itself, synchronous: called right before `join`, with nothing awaited in between. Joins whose last awaits
+   * resolve in the same tick (a join storm whose ticket reads were merged into one multicall) all confirmed the same
+   * instance before any of them sat down; checked again here, each takes the seat that is really free (the instance,
+   * or the next one `ArenaScaler.seatFor` gives, a new instance included). Null when the arena has no seat now.
+   */
+  seatArenaNow(arenaId: number, room: RoomHandle): RoomHandle | null {
+    const live = (r: RoomHandle | null): r is RoomHandle => r !== null && this.get(r.id) === r && this.scaler.seatable(r);
+    if (live(room)) return room;
+    if (!this.arenaAllowed(arenaId) || this.underfunded.has(arenaId)) return null;
+    const again = this.scaler.seatFor(arenaId);
+    if (!live(again)) return null;
+    again.lastActivity = Date.now();
+    return again;
   }
 
   /** What a running instance knows of its arena (its ticket price), for when the chain cannot be read. */

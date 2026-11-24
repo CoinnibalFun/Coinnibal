@@ -862,6 +862,15 @@ seats, draining, the worker each runs on) and the last 100 decisions (`open`, `o
 directory and prints the instances minute by minute and every decision, then checks that every seated ticket was
 settled exactly once.
 
+`pnpm -F @coinnibal/server stress` (`scripts/bench/stress.ts`; a local server on the dev fake chain, never the live
+site) drives the whole path with WebSocket clients that behave like the web client, plus HTTP traffic on the site's
+APIs: a ramp of 100 → 500 → 1000 → 1500 players, a join storm at a round's opening, slow clients, a mass
+disconnect, a room worker crash, a restart with every client reconnecting at once, a consolidation, a long run with
+churn, and the connection limits. After every phase it checks the directory (no room past its seats, no duplicate,
+`/api/rooms` matching it, every instance on the same round) and it writes a JSON report: per-thread tick, lag, CPU
+and GC, memory, bytes per client, snapshot interval, ping, join and reconnect times, the bell's delay. On a shared
+machine set `STRESS_SHED=0` for the scaling phases (the load shedder otherwise reacts to the other processes).
+
 ## Abuse and DDoS
 
 | Layer | Limit |
