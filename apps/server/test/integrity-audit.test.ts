@@ -114,6 +114,11 @@ describe('audit: integrity auto-hold at a bell (fixed)', () => {
     svc.ingestSession(parked(13));
     svc.ingestSession(parked(14));
     svc.ingestSession(parked(15));
+    // two more on one browser, in different instances
+    const fpA = sess('0xFpA', 12, { fpHash: 'fp-two', roomId: 'arena-1-2' });
+    const fpB = sess('0xFpB', 12, { fpHash: 'fp-two', roomId: 'arena-1-3' });
+    svc.ingestSession(fpA);
+    svc.ingestSession(fpB);
     for (let i = 0; i < 20; i++) svc.ingestSession(sess(`0xHonest${i}`, 16));
     svc.updateSettings({ autoHold: true, holdScore: 50 }, 'test');
 
@@ -135,6 +140,12 @@ describe('audit: integrity auto-hold at a bell (fixed)', () => {
     const m = settleItem('0xMain', FEE * 2);
     svc.holdDecision(m, FEE);
     expect(m.held?.why).toMatch(/same arena at the same time from one browser/);
+    // value moved between the second pair after the shared run was made: that wallet's decision reads it
+    svc.ingestTransfer({ at: fpA.joinedAt + 5000, arenaId: 1, roomId: 'arena-1-2', round: 12, from: '0xFpB', to: '0xFpA', amount: FEE, fee: FEE, fromKey: fpB.key, toKey: fpA.key, others: 10, afkEater: false });
+    mono += 1;
+    const f = settleItem('0xFpA', FEE * 2);
+    svc.holdDecision(f, FEE);
+    expect(f.held?.why).toMatch(/value moved between them/);
     // a decision long after the burst runs on its own (scoped) again
     mono += 10_000;
     now += 10_000;
