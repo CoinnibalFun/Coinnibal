@@ -6,7 +6,8 @@ import { ledgerDecimals } from '@coinnibal/sdk';
 import { BRAND_NAME, EATEN_SHOWN, siteHostOf, PlayerFlag, SHARE_BOARD_ROWS, SHARE_ID_RE, isXHandle, SHARE_IMAGE, arenaMeta, formatToken, shareName, shortAddress, type EatenName, type RoundStanding, type ShareBoardRow, type ShareCard, type ShareKind } from '@coinnibal/shared';
 import { Limiter } from '../net/limiter';
 import type { PlayerLook, RoomHandle } from '../rooms/handle';
-import { renderShareCard, renderStandingsCard, shareFacts, shareHeadline } from './share-card';
+import { CardRenderError, inlineCardRenderer, type CardRenderer } from './card-renderer';
+import { shareFacts, shareHeadline } from './share-card';
 
 /**
  * "Share on X" (`packages/shared/src/share.ts`): the cards of results and notable kills, made by the server from its
@@ -30,8 +31,8 @@ export const OFFERS_KEPT = 20_000;
 export const OFFER_TTL_MS = 6 * 60 * 60_000;
 const RENDERS_PER_MIN = 30;
 /**
- * Renders a minute for the whole server (each one is ~20-50 ms of the main thread's CPU): a crowd of IPs (or the
- * one IP of a CDN) cannot turn card rendering into a CPU flood. Cached cards are served without a render.
+ * Renders a minute for the whole server (each one is 30-75 ms of a card worker's CPU, `card-renderer.ts`): a crowd of
+ * IPs (or the one IP of a CDN) cannot turn card rendering into a CPU flood. Cached cards are served without a render.
  */
 const RENDERS_PER_MIN_ALL = 120;
 const PNG_CACHE = 64;
@@ -48,6 +49,8 @@ export interface ShareDeps {
   token: () => { decimals: number; symbol: string } | null;
   /** "Link X": the handle is linked to a wallet right now (a card tags only such a handle; absent: never tag). */
   xLinked?: (handle: string) => boolean;
+  /** Where the pictures are drawn (the app's card workers); default: this thread. */
+  renderer?: CardRenderer;
   now?: () => number;
   log?: (m: string) => void;
 }
@@ -64,6 +67,8 @@ export class ShareService {
   /** Kill cards not opened yet (memory only; see the class note). */
   private readonly offers = new Map<string, ShareCard>();
   private readonly png = new Map<string, Buffer>();
+  /** Pictures being drawn: a second request for one waits for the same draw (as it found it cached before). */
+  private readonly drawing = new Map<string, Promise<Buffer>>();
   private readonly renders = new Limiter(RENDERS_PER_MIN, 60_000);
   private readonly rendersAll = new Limiter(RENDERS_PER_MIN_ALL, 60_000);
   /** Drawing failed on this machine (the canvas addon did not load): images fall back to the site's picture. */
@@ -305,35 +310,58 @@ export class ShareService {
     }
     if (m[2]) {
       const key = standings ? `${card.id}/standings` : card.id;
-      let png = this.png.get(key);
-      if (!png) {
-        if (this.renderBroken) {
-          // no canvas here: the site's own Open Graph picture, so a shared link still shows an image
-          res.writeHead(302, { Location: `${this.d.baseUrl(req).replace(/\/$/, '')}/og-coinnibal.png`, 'Cache-Control': 'public, max-age=300' });
-          res.end();
-          return true;
-        }
+      const send = (png: Buffer) => {
+        if (res.writableEnded || res.destroyed) return;
+        // a card never changes: CDNs (Cloudflare) may keep it as long as they like
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': png.length, 'Cache-Control': 'public, max-age=86400, s-maxage=604800, immutable' });
+        res.end(req.method === 'HEAD' ? undefined : png);
+      };
+      // no canvas here (or this draw failed): the site's own Open Graph picture, so a shared link still shows an image
+      const fallback = (cache: boolean) => {
+        if (res.writableEnded || res.destroyed) return;
+        res.writeHead(302, { Location: `${this.d.baseUrl(req).replace(/\/$/, '')}/og-coinnibal.png`, ...(cache ? { 'Cache-Control': 'public, max-age=300' } : {}) });
+        res.end();
+      };
+      const cached = this.png.get(key);
+      if (cached) {
+        send(cached);
+        return true;
+      }
+      if (this.renderBroken) {
+        fallback(true);
+        return true;
+      }
+      let draw = this.drawing.get(key);
+      if (!draw) {
         if (!this.renders.allow(ip) || !this.rendersAll.allow('all')) {
           res.writeHead(429, { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '60' });
           res.end('Too many cards. Try again in a minute.');
           return true;
         }
-        try {
-          const site = siteHostOf(this.d.baseUrl(req));
-          png = standings ? renderStandingsCard(card, site) : renderShareCard(card, site);
-        } catch (err) {
-          this.renderBroken = String((err as Error)?.message ?? err).split('\n')[0];
-          this.d.log?.(`!!! share cards: drawing failed (${this.renderBroken}) — share images fall back to the site's picture until a restart`);
-          res.writeHead(302, { Location: `${this.d.baseUrl(req).replace(/\/$/, '')}/og-coinnibal.png` });
-          res.end();
-          return true;
-        }
-        this.png.set(key, png);
-        if (this.png.size > PNG_CACHE) this.png.delete(this.png.keys().next().value!);
+        const site = siteHostOf(this.d.baseUrl(req));
+        draw = (this.d.renderer ?? inlineCardRenderer).render(standings ? { kind: 'standings', card, site } : { kind: 'share', card, site });
+        this.drawing.set(key, draw);
+        draw.then(
+          (png) => {
+            this.drawing.delete(key);
+            this.png.set(key, png);
+            if (this.png.size > PNG_CACHE) this.png.delete(this.png.keys().next().value!);
+          },
+          (err: unknown) => {
+            this.drawing.delete(key);
+            if (err instanceof CardRenderError && err.code !== 'canvas') return;
+            this.renderBroken ??= String((err as Error)?.message ?? err).split('\n')[0];
+            this.d.log?.(`!!! share cards: drawing failed (${this.renderBroken}) — share images fall back to the site's picture until a restart`);
+          },
+        );
       }
-      // a card never changes: CDNs (Cloudflare) may keep it as long as they like
-      res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': png.length, 'Cache-Control': 'public, max-age=86400, s-maxage=604800, immutable' });
-      res.end(req.method === 'HEAD' ? undefined : png);
+      draw.then(send, (err: unknown) => {
+        if (err instanceof CardRenderError && err.code === 'busy') {
+          if (res.writableEnded || res.destroyed) return;
+          res.writeHead(429, { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '5' });
+          res.end('Too many cards. Try again in a moment.');
+        } else fallback(false);
+      });
       return true;
     }
     const html = sharePage(card, this.d.baseUrl(req).replace(/\/$/, ''));

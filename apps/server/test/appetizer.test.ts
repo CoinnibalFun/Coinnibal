@@ -382,22 +382,21 @@ describe('the Appetizer: limits and fallbacks', () => {
     }
   });
 
-  it('limits image renders per IP; a cached card is served without one', () => {
+  it('limits image renders per IP; a cached card is served without one', async () => {
     const s = new AppetizerService({ path: null, baseUrl: () => 'https://coinnibal.fun' });
     const codes = Array.from({ length: 31 }, (_, i) => s.claim(testSigner().address, `render_${i}`).card.code);
-    const out: { status?: number } = {};
-    const res = { writeHead: (status: number) => (out.status = status), end() {} } as never;
     const req = { method: 'HEAD', headers: {} } as never;
-    for (const code of codes.slice(0, 30)) {
-      s.handle(req, res, `/appetizer/${code}.png`, '9.9.9.9');
-      expect(out.status).toBe(200);
-    }
-    s.handle(req, res, `/appetizer/${codes[30]}.png`, '9.9.9.9');
-    expect(out.status).toBe(429);
-    s.handle(req, res, `/appetizer/${codes[0]}.png`, '9.9.9.9');
-    expect(out.status).toBe(200);
-    s.handle(req, res, `/appetizer/${codes[30]}.png`, '8.8.8.8');
-    expect(out.status).toBe(200);
+    // the answer comes when the card is drawn (a card worker in the app; this thread here)
+    const get = (code: string, ip: string) =>
+      new Promise<number>((resolve) => {
+        let status = 0;
+        const res = { writeHead: (st: number) => (status = st), end: () => resolve(status) } as never;
+        s.handle(req, res, `/appetizer/${code}.png`, ip);
+      });
+    for (const code of codes.slice(0, 30)) expect(await get(code, '9.9.9.9')).toBe(200);
+    expect(await get(codes[30], '9.9.9.9')).toBe(429);
+    expect(await get(codes[0], '9.9.9.9')).toBe(200);
+    expect(await get(codes[30], '8.8.8.8')).toBe(200);
   });
 
   it('loads cards stored before the follow was asked with followedAt null (the CSV leaves it empty)', () => {

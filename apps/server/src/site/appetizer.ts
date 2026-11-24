@@ -21,7 +21,7 @@ import {
 } from '@coinnibal/shared';
 import type { XPost, XPostRead } from '../xlink';
 import { Limiter } from '../net/limiter';
-import { renderAppetizerCard } from './share-card';
+import { CardRenderError, inlineCardRenderer, type CardRenderer } from './card-renderer';
 import { csv } from './store';
 import { SiteFail, obj } from './validate';
 
@@ -137,6 +137,8 @@ export interface AppetizerDeps {
   kept?: number;
   /** Reads a post from X (`XLinkService.readPost`); without it every post link is kept unchecked. */
   readPost?: ((id: string) => Promise<XPostRead>) | null;
+  /** Where the cards are drawn (the app's card workers, `setRenderer`); default: this thread. */
+  renderer?: CardRenderer;
   now?: () => number;
   log?: (m: string) => void;
 }
@@ -154,6 +156,9 @@ export class AppetizerService {
   /** When the pending write runs (Unix ms of `Date.now`), while `saveTimer` is set. */
   private saveAt = 0;
   private readonly png = new Map<string, Buffer>();
+  /** Cards being drawn: a second request for one waits for the same draw. */
+  private readonly drawing = new Map<string, Promise<Buffer>>();
+  private renderer: CardRenderer;
   private readonly renders = new Limiter(RENDERS_PER_MIN, 60_000);
   private readonly rendersAll = new Limiter(RENDERS_PER_MIN_ALL, 60_000);
   /** Drawing failed on this machine (the canvas addon did not load): images fall back to the site's picture. */
@@ -173,12 +178,18 @@ export class AppetizerService {
     this.postIp = d.postIp ?? new Limiter(30, 60 * 60_000);
     this.kept = d.kept ?? APPETIZER_LIMITS.kept;
     this.readPost = d.readPost ?? null;
+    this.renderer = d.renderer ?? inlineCardRenderer;
     this.now = d.now ?? Date.now;
     this.log = d.log ?? (() => {});
     this.load();
   }
 
   /** The X reader for post links (set once "Link X" is up). */
+  /** Where the cards are drawn from now on (the app's card workers). */
+  setRenderer(r: CardRenderer): void {
+    this.renderer = r;
+  }
+
   setPostReader(fn: ((id: string) => Promise<XPostRead>) | null): void {
     this.readPost = fn;
     this.ours = null;
@@ -494,28 +505,52 @@ export class AppetizerService {
       res.end(req.method === 'HEAD' ? undefined : appetizerPage(publicCard(e), origin));
       return true;
     }
-    let png = this.png.get(e.code);
-    if (!png) {
-      if (this.renderBroken) return this.fallback(res, origin, e);
+    const send = (png: Buffer) => {
+      if (res.writableEnded || res.destroyed) return;
+      this.viewed(e);
+      // kept short: every fetch counts as a view (a CDN that kept it for days would hide them), and a deleted card goes
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': png.length, 'Cache-Control': 'public, max-age=300' });
+      res.end(req.method === 'HEAD' ? undefined : png);
+    };
+    const cached = this.png.get(e.code);
+    if (cached) {
+      send(cached);
+      return true;
+    }
+    if (this.renderBroken) return this.fallback(res, origin, e);
+    const code = e.code;
+    let draw = this.drawing.get(code);
+    if (!draw) {
       if (!this.renders.allow(ip) || !this.rendersAll.allow('all')) {
         res.writeHead(429, { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '60' });
         res.end('Too many cards. Try again in a minute.');
         return true;
       }
-      try {
-        png = renderAppetizerCard(e, siteHostOf(origin));
-      } catch (err) {
-        this.renderBroken = String((err as Error)?.message ?? err).split('\n')[0];
-        this.log(`!!! appetizer cards: drawing failed (${this.renderBroken}) — card images fall back to the site's picture until a restart`);
-        return this.fallback(res, origin, e);
-      }
-      this.png.set(e.code, png);
-      if (this.png.size > PNG_CACHE) this.png.delete(this.png.keys().next().value!);
+      draw = this.renderer.render({ kind: 'appetizer', card: { no: e.no, handle: e.handle, at: e.at }, site: siteHostOf(origin) });
+      this.drawing.set(code, draw);
+      draw.then(
+        (png) => {
+          this.drawing.delete(code);
+          // a card deleted while it was drawn is not cached
+          if (this.byCode.get(code) !== e) return;
+          this.png.set(code, png);
+          if (this.png.size > PNG_CACHE) this.png.delete(this.png.keys().next().value!);
+        },
+        (err: unknown) => {
+          this.drawing.delete(code);
+          if (err instanceof CardRenderError && err.code !== 'canvas') return;
+          this.renderBroken ??= String((err as Error)?.message ?? err).split('\n')[0];
+          this.log(`!!! appetizer cards: drawing failed (${this.renderBroken}) — card images fall back to the site's picture until a restart`);
+        },
+      );
     }
-    this.viewed(e);
-    // kept short: every fetch counts as a view (a CDN that kept it for days would hide them), and a deleted card goes
-    res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': png.length, 'Cache-Control': 'public, max-age=300' });
-    res.end(req.method === 'HEAD' ? undefined : png);
+    draw.then(send, (err: unknown) => {
+      if (res.writableEnded || res.destroyed) return;
+      if (err instanceof CardRenderError && err.code === 'busy') {
+        res.writeHead(429, { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '5' });
+        res.end('Too many cards. Try again in a moment.');
+      } else this.fallback(res, origin, e, err instanceof CardRenderError && err.code === 'canvas');
+    });
     return true;
   }
 
@@ -525,9 +560,10 @@ export class AppetizerService {
   }
 
   /** No canvas here: the site's own Open Graph picture, so a shared link still shows an image. */
-  private fallback(res: ServerResponse, origin: string, e: AppetizerEntry): true {
+  private fallback(res: ServerResponse, origin: string, e: AppetizerEntry, cache = true): true {
     this.viewed(e);
-    res.writeHead(302, { Location: `${origin}/og-coinnibal.png`, 'Cache-Control': 'public, max-age=300' });
+    // a passing failure (a worker died) is not cached: the next fetch draws the card
+    res.writeHead(302, { Location: `${origin}/og-coinnibal.png`, ...(cache ? { 'Cache-Control': 'public, max-age=300' } : {}) });
     res.end();
     return true;
   }
