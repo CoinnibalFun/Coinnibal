@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -48,6 +48,19 @@ describe('security audit: Appetizer image views', () => {
     s.claim(testSigner().address, 'second_2');
     vi.advanceTimersByTime(1_100);
     expect(new AppetizerService({ path: file, baseUrl: () => 'https://coinnibal.fun' }).total).toBe(2);
+  });
+});
+
+describe('security audit: the open-play copy (apps/web/vercel.json)', () => {
+  it('is never framed and runs scripts of its own origin only, as the site the server serves (clickjacking of wallet and admin actions)', async () => {
+    const { WEB_CSP } = await import('../src/http');
+    const v = JSON.parse(readFileSync(join(__dirname, '../../web/vercel.json'), 'utf8')) as { headers?: { source: string; headers: { key: string; value: string }[] }[] };
+    const all = (v.headers ?? []).find((h) => h.source === '/(.*)');
+    const get = (k: string) => all?.headers.find((h) => h.key.toLowerCase() === k.toLowerCase())?.value;
+    expect(get('Content-Security-Policy')).toBe(WEB_CSP);
+    expect(get('X-Frame-Options')).toBe('DENY');
+    expect(get('X-Content-Type-Options')).toBe('nosniff');
+    expect(get('Referrer-Policy')).toBe('strict-origin-when-cross-origin');
   });
 });
 
