@@ -221,7 +221,7 @@ has more bots than its setting, nor more playing than the setting minus its peop
   `ADMIN_TOKEN_TTL_MIN`, `ADMIN_SECRET_EXPORT`, `GAME_ACCESS`, `MINT_USD_CENTS`, `GAS_PRICE_URL`, `TOKEN_SYMBOL`,
   `STAKE_ENABLED`, `STAKE_ARENA_IDS`, `STALE_SESSION_AFTER_S`, `DEATH_SETTLE_BATCH_S`, `PAYOUT_GUARD_MULTIPLE`,
   `GAS_FLOOR_ETH`, `GAS_RUNWAY_WARN_DAYS`, `GAS_RUNWAY_CRITICAL_DAYS`, `HEALTH_MAX_PENDING`, `HEALTH_MAX_PENDING_AGE_S`,
-  `LOG_CHUNK_BLOCKS`, `RPC_MAX_RPS` (one rate or one per URL), `RPC_BURST`, `TESTNET_RPC_URL`, `GAME_WORKERS`,
+  `LOG_CHUNK_BLOCKS`, `RPC_MAX_RPS` (one rate or one per URL), `RPC_BURST`, `TESTNET_RPC_URL`, `GAME_WORKERS`, `CARD_WORKERS`,
   `MAX_CONNECTIONS`, `JOIN_PERMIT_TTL_S`, `JOIN_PERMIT_HOLD_S`, `JOIN_PERMIT_PER_IP`, `JOIN_PERMIT_PER_SUBNET`,
   `JOIN_PERMIT_PER_SITE`, `JOIN_PERMIT_PER_WALLET`, `JOIN_PERMIT_OPEN_PER_IP`, `JOIN_PERMIT_OPEN_PER_SUBNET`,
   `JOIN_PERMIT_OPEN_PER_SITE`, `JOIN_PERMIT_FRESH_SHARE`, `JOIN_PERMIT_UNUSED_LIMIT`, `JOIN_PERMIT_ARENA_CAP`,
@@ -409,7 +409,9 @@ has more bots than its setting, nor more playing than the setting minus its peop
   nobody shares never push a result card out. Nothing of a card comes from a client. `GET /share/<id>` is a page with
   the Open Graph / Twitter `summary_large_image` tags; `GET /share/<id>.png` the 1200 x 630 card drawn with
   `@coinnibal/art` on `@napi-rs/canvas` with the site's own fonts, and `GET /share/<id>/standings.png` a result's final
-  standings in the same style (cached; 30 renders per IP a minute; a picture fetch never keeps an offer). Cards are
+  standings in the same style (cached; 30 renders per IP a minute; a picture fetch never keeps an offer). The
+  pictures (and the Appetizer cards) are drawn in a card worker thread, not on the main thread ("Card workers" under
+  "Threads"). Cards are
   kept in `DATA_DIR/site/shares.json` (the newest 5,000). The web's end sheets (`SharePanel`) preview the pictures,
   save them as files and hand them to the Web Share API (`navigator.canShare({ files })`), and open X's web intent
   (`x.com/intent/post`) with a localized line and the card's link: no X API (an intent cannot attach a picture).
@@ -585,6 +587,29 @@ with 0 everything runs on the main thread exactly as before (tests, `pnpm dev`).
 - **Tests.** The usual suite runs with 0 workers; `pnpm -F @coinnibal/server test:workers` runs the WebSocket
   integration suite with two workers (`TEST_GAME_WORKERS=2`) plus `test/workers.test.ts` (bell settlement,
   reattach, crash and hang recovery, custom-room close, shutdown); `workers.test.ts` runs only there (vitest.config.ts).
+
+### Card workers (`CARD_WORKERS`)
+
+A share or Appetizer card is 30-75 ms of drawing (@napi-rs/canvas; up to ~235 ms measured under load), and on the
+main thread it stalled every player's snapshots for that long. The pictures are drawn in a small pool of
+`worker_threads` (`site/card-renderer.ts`, `site/card-worker-main.ts`, built as `dist/card-worker.js` next to
+`dist/index.js`): `CARD_WORKERS` threads (default 1, at most 4; 0 draws on the main thread as before), one card at a
+time each, at most 32 waiting (past it a `429`, `Retry-After: 5`). The drawing code is the same on both sides
+(`site/card-jobs.ts`), so are the PNG bytes (tested). The main thread keeps everything else: the per-IP (30 a minute)
+and server-wide (120) render limits, the PNG caches, and one draw per picture however many ask for it at once. The
+startup self-check (canvas, fonts, a tiny PNG) runs in the worker; when the canvas cannot load there, or a worker
+dies three times in a row without drawing anything, the images fall back to the site's own picture until a restart,
+as before. A worker that dies or takes over 10 s on a card is replaced; that one request gets the site picture
+(not cached). Shutdown terminates the workers. Each worker holds its own canvas and fonts (about 30 MB).
+
+`node --import tsx scripts/bench/card-bench.ts` (from `apps/server`) measures it, 30 cards asked for at once, on the
+4-core sandbox:
+
+| Where the cards are drawn | 30 cards | Main thread longest stall | Event-loop delay p99 |
+|---|---|---|---|
+| main thread (`CARD_WORKERS=0`, before) | 1.3-1.5 s | 82-85 ms | 62-80 ms |
+| 1 card worker (default) | 1.5-1.8 s | 1.4-3.2 ms | 1.4 ms |
+| 2 card workers | 0.9 s | 3.3-3.7 ms | 2.3-2.9 ms |
 
 ### Capacity (measured)
 

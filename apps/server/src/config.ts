@@ -65,6 +65,11 @@ export interface ServerConfig {
   /** A room worker silent this long is stopped and its rooms recovered (`GAME_WORKER_HANG_S`, default 10). */
   gameWorkerHangMs: number;
   /**
+   * Card worker threads (`CARD_WORKERS`, default 1, at most 4): share and Appetizer card pictures are drawn there,
+   * off the main thread (`site/card-renderer.ts`). 0: drawn on the main thread, as before.
+   */
+  cardWorkers: number;
+  /**
    * Arena round clock (`ROUND_SECONDS` = the play, `ROUND_JOIN_CLOSE_SECONDS`, `ROUND_BREAK_SECONDS` = the break
    * added after each bell; defaults `RULES.roundMs` / `RULES.roundJoinCloseMs` / `RULES.roundBreakMs`). Tests, the
    * localnet e2e and demo recordings shorten it; production uses the defaults. The closed window is at most half the
@@ -392,6 +397,16 @@ export function gameWorkers(env: NodeJS.ProcessEnv): number {
   return env.NODE_ENV === 'production' ? Math.max(1, availableParallelism() - 1) : 0;
 }
 
+/** `CARD_WORKERS`: a whole number, at most 4; unset or not a number: 1. 0 draws the cards on the main thread. */
+export function cardWorkers(env: NodeJS.ProcessEnv): number {
+  const raw = env.CARD_WORKERS?.trim();
+  if (raw) {
+    const n = Math.floor(Number(raw));
+    if (Number.isFinite(n) && n >= 0) return Math.min(4, n);
+  }
+  return 1;
+}
+
 /**
  * `EVM_RPC_URLS` (comma-separated, in order of preference), else `EVM_RPC_URL`: trailing slashes dropped, duplicates
  * and blanks removed.
@@ -453,6 +468,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     },
     gameWorkers: gameWorkers(env),
     gameWorkerHangMs: Math.max(2, int(env.GAME_WORKER_HANG_S, 10)) * 1000,
+    cardWorkers: cardWorkers(env),
     round: parseRoundConfig(env),
     authSecret: secret,
     authSecretFromEnv: !!env.AUTH_SECRET,

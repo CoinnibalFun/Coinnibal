@@ -29,13 +29,15 @@ export const ARENA_META: Record<number, ArenaMeta> = {
  *
  * `entryTokens` (whole tokens; scale by the token's decimals for base units) is what Finish setup creates the arenas
  * with before any price is set: the dollar price at the reference price `REFERENCE_USD_PER_TOKEN` ($0.001 a token),
- * so a fresh testnet already has the 1 : 3 : 5 : 10 ladder. `maxSessions` is how many tickets can be open at once.
+ * so a fresh testnet already has the 1 : 3 : 5 : 10 ladder. `maxSessions` is how many tickets can be open at once
+ * (1,500 each; the contract allows 2..2,000). Arenas already on chain keep the value they were created with until the
+ * owner changes it (`/admin` → Game → the arena contract → "Max open tickets", one `updateArena` per arena).
  */
 export const DEFAULT_ARENAS = [
-  { id: 1, usdCents: 100, entryTokens: 1000, maxSessions: 300, holdersOnly: false },
-  { id: 2, usdCents: 300, entryTokens: 3000, maxSessions: 300, holdersOnly: false },
-  { id: 3, usdCents: 500, entryTokens: 5000, maxSessions: 300, holdersOnly: false },
-  { id: 4, usdCents: 1000, entryTokens: 10000, maxSessions: 300, holdersOnly: true },
+  { id: 1, usdCents: 100, entryTokens: 1000, maxSessions: 1500, holdersOnly: false },
+  { id: 2, usdCents: 300, entryTokens: 3000, maxSessions: 1500, holdersOnly: false },
+  { id: 3, usdCents: 500, entryTokens: 5000, maxSessions: 1500, holdersOnly: false },
+  { id: 4, usdCents: 1000, entryTokens: 10000, maxSessions: 1500, holdersOnly: true },
 ] as const;
 
 /** The token price `DEFAULT_ARENAS.entryTokens` assume (USD per whole token, a decimal string). */

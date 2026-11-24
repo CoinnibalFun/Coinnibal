@@ -54,7 +54,7 @@ explains how the game plays, how money moves, how the code is laid out and how i
 | Power-ups | Magnet (10 s), Pump (6 s, × 1.4 speed), Shield (8 s), Bag (+15 % mass, at least 40) |
 | Bought power-ups (the shop, in the lobby only; `packages/shared/src/boosts.ts`) | Magnet `R` (8 s), Leap `F` (instant hop toward the aim, 420 + 0.9·r units, at most 900, never through the wall), Speed `G` (3 s), Invisibility `V` (10 s: the server sends the coins to nobody else, practice bots and minimap leader dots skip them; eating works as usual). The Shockwave was retired in 2026-11: saved charges, prices and switches load as Leap 1:1 |
 | Spawn shield | 5.5 s |
-| Room sizes | Dynamic (default, section 2.2.2): side = 8,000 + 40 per person, at most 12,000; auto off: Practice 6800², Private 4600², Arena 7800². Humans per instance: Practice 40, Arena 50 |
+| Room sizes | Dynamic (default, section 2.2.2): side = 8,000 + 80 per person, at most 12,000; auto off: Practice 6800², Private 4600², Arena 7800². Humans per instance: Practice 40, Arena 50 |
 
 ### 2.2 Controls
 
@@ -95,8 +95,10 @@ explains how the game plays, how money moves, how the code is laid out and how i
   `side = min(max, base + perPlayer × people)`, rounded up to 10, never below `base`. Food, cacti and power-ups
   follow the area at a practice pond's density (capped at 4,000 food and 40 cacti): a 10,000 room has about 3,500
   coins, 30 cacti and 6 power-up slots.
-- Defaults (every room kind): base 8,000, 40 per person, max 12,000. 1 person 8,040, 25 people 9,000, a full pond
-  (40) 9,600, a full arena instance (50) 10,000, 100 and more 12,000.
+- Defaults (every room kind): base 8,000, 80 per person, max 12,000. 1 person 8,080, 25 people 10,000, a full pond
+  (40) 11,200, a full arena instance (50) and more 12,000 (the food cap holds there: 4,000 coins, 80 a person). Until
+  2026-11-24 the default was 40 per person (25 people 9,000, 50 people 10,000); a server whose admin saved map sizes
+  keeps them (OPERATIONS.md, "Map sizes").
 - Admin (`/admin` → Game → Maps, `/api/admin/maps`, stored in `DATA_DIR/site/maps.json`; the maps of an older
   `site/bots.json` are taken over once): per room kind (practice rookie / pro, arenas, private rooms), `auto`
   on/off, `base` and `max` side (2,000..12,000) and `perPlayer` (0..300 per person). A kind saved in the former
@@ -167,7 +169,7 @@ Tickets are priced in US dollars; the chain keeps the entry fee in tokens, and t
 token's USD price from `/admin` (ECONOMY.md section 1).
 
 Ids 1 to 4, created from `/admin` → Setup → Finish setup (or `pnpm admin create-arena --defaults`) once the token is
-set, 300 open tickets each; the $10 Room is for NFT holders. Each arena runs as 50-player instances on the same vault:
+set, 1,500 open tickets each; the $10 Room is for NFT holders. Each arena runs as 50-player instances on the same vault:
 another opens when they keep filling up, a quiet one drains (no new seats) and closes after its bell, nobody evicted
 (OPERATIONS.md, "Arena instances").
 

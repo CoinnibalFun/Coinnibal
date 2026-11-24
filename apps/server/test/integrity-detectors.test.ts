@@ -213,16 +213,59 @@ describe('shared device detector', () => {
     expect(out[0].evidence).toMatchObject({ sameIp: true, sameBrowser: true, sameInstance: true });
   });
 
-  it('a shared IP alone stays below the flag score, unless value moved between the wallets', () => {
+  it('a shared IP alone stays below the flag score', () => {
     const a = sess('alice', 1, { ipHash: 'ip1' });
     const b = sess('bob', 1, { ipHash: 'ip1' });
     const cand = detectSharedDevice(snap([a, b]), TH);
     expect(cand).toHaveLength(1);
     expect(cand[0].score).toBeLessThan(TH.flagMinScore);
     expect(runDetectors(snap([a, b]), TH)).toEqual([]);
-    const moved = runDetectors(snap([a, b], [tr(a, b, FEE, a.joinedAt + 1000)]), TH).filter((c) => c.kind === 'shared_device');
-    expect(moved).toHaveLength(1);
-    expect(moved[0].score).toBeGreaterThanOrEqual(TH.flagMinScore);
+  });
+
+  it('two strangers behind one carrier IP are not flagged when one eats the other (ordinary play)', () => {
+    const a = sess('alice', 1, { ipHash: 'carrier' });
+    const b = sess('bob', 1, { ipHash: 'carrier' });
+    // bob eats alice's whole coin once: one entry fee moves, below `pairMinNetFees`
+    expect(runDetectors(snap([a, b], [tr(a, b, FEE, a.joinedAt + 60_000)]), TH)).toEqual([]);
+    // bob eats alice's doubled coin (2 entry fees at once), or her coin in two rounds: what the simulation's strangers do
+    expect(runDetectors(snap([a, b], [tr(a, b, 2 * FEE, a.joinedAt + 60_000)]), TH)).toEqual([]);
+    const a1 = sess('alice', 2, { ipHash: 'carrier' });
+    const b1 = sess('bob', 2, { ipHash: 'carrier' });
+    expect(runDetectors(snap([a, b, a1, b1], [tr(a, b, FEE, a.joinedAt + 60_000), tr(a1, b1, FEE, a1.joinedAt + 60_000)]), TH)).toEqual([]);
+    // they trade kills over a few rounds: plenty moves, but the net flow stays small
+    const a2 = sess('alice', 2, { ipHash: 'carrier' });
+    const b2 = sess('bob', 2, { ipHash: 'carrier' });
+    const swaps = [tr(a, b, 1.5 * FEE, a.joinedAt + 60_000), tr(b, a, 1.2 * FEE, a.joinedAt + 120_000), tr(a2, b2, 0.8 * FEE, a2.joinedAt + 60_000), tr(b2, a2, 0.9 * FEE, a2.joinedAt + 90_000)];
+    const out = runDetectors(snap([a, b, a2, b2], swaps), TH);
+    expect(out).toEqual([]);
+    const cand = detectSharedDevice(snap([a, b, a2, b2], swaps), TH);
+    expect(cand[0].score).toBe(TH.sharedIpScore);
+    expect(cand[0].evidence).toMatchObject({ sameIp: true, sameBrowser: false, valueBetweenFees: 4.4, netValueFees: 0.2 });
+  });
+
+  it('one IP and real feeding (a meaningful net flow one way) is still flagged', () => {
+    // the feeder hands the main wallet its coin in three rounds (`pairMinRounds`), three entry fees in all
+    const ss = [1, 2, 3].flatMap((r) => [sess('feeder', r, { ipHash: 'ip1' }), sess('main', r, { ipHash: 'ip1' })]);
+    const fed = [0, 2, 4].map((i) => tr(ss[i], ss[i + 1], FEE, ss[i].joinedAt + 40_000));
+    const out = runDetectors(snap(ss, fed), TH).filter((c) => c.kind === 'shared_device');
+    expect(out).toHaveLength(1);
+    expect(out[0].score).toBe(TH.sharedIpScore + 10);
+    expect(out[0].score).toBeGreaterThanOrEqual(TH.flagMinScore);
+    expect(out[0].evidence).toMatchObject({ netValueFees: 3, netRounds: 3 });
+    expect(out[0].summary).toMatch(/value moved between them \(3 entry fees\)/);
+    // the direction does not matter: main feeding feeder counts the same
+    const back = [0, 2, 4].map((i) => tr(ss[i + 1], ss[i], FEE, ss[i].joinedAt + 40_000));
+    expect(runDetectors(snap(ss, back), TH).filter((c) => c.kind === 'shared_device')).toHaveLength(1);
+    // a little value coming back does not hide it
+    const mostly = [...fed, tr(ss[1], ss[0], 0.5 * FEE, ss[0].joinedAt + 90_000)];
+    expect(runDetectors(snap(ss, mostly), TH).filter((c) => c.kind === 'shared_device')[0].score).toBe(TH.sharedIpScore + 10);
+  });
+
+  it('one browser and any value between the wallets still scores the browser bonus', () => {
+    const a = sess('alice', 1, { ipHash: 'ipA', fpHash: 'fpX' });
+    const b = sess('bob', 1, { ipHash: 'ipB', fpHash: 'fpX' });
+    const out = detectSharedDevice(snap([a, b], [tr(a, b, 0.2 * FEE, a.joinedAt + 1000)]), TH);
+    expect(out[0].score).toBe(TH.sharedFpScore + 10 + 15);
   });
 
   it('does not flag wallets that never overlapped, other arenas, or one wallet twice', () => {

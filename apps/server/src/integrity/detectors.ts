@@ -316,17 +316,36 @@ export function detectSharedDevice(snap: IntegritySnapshot, th: IntegrityThresho
     }
   }
   if (pairs.size === 0) return [];
+  // value between the pair, in entry fees: all of it (`moved`), the net of it from the lower wallet to the higher, and
+  // the rounds in which value went each way
   const moved = new Map<string, number>();
+  const net = new Map<string, number>();
+  const rounds = new Map<string, { up: Set<string>; down: Set<string> }>();
   for (const t of snap.transfers) {
     const pk = t.from < t.to ? `${t.from}|${t.to}` : `${t.to}|${t.from}`;
-    if (pairs.has(pk)) moved.set(pk, (moved.get(pk) ?? 0) + (t.fee > 0 ? t.amount / t.fee : 0));
+    if (!pairs.has(pk)) continue;
+    const v = t.fee > 0 ? t.amount / t.fee : 0;
+    moved.set(pk, (moved.get(pk) ?? 0) + v);
+    net.set(pk, (net.get(pk) ?? 0) + (t.from < t.to ? v : -v));
+    let r = rounds.get(pk);
+    if (!r) rounds.set(pk, (r = { up: new Set(), down: new Set() }));
+    (t.from < t.to ? r.up : r.down).add(`${t.arenaId}:${t.round}`);
   }
   const out: Candidate[] = [];
   for (const [pk, p] of pairs) {
     const fees = moved.get(pk) ?? 0;
+    const signed = net.get(pk) ?? 0;
+    const netFees = Math.abs(signed);
+    const r = rounds.get(pk);
+    const netRounds = r ? (signed >= 0 ? r.up : r.down).size : 0;
     let score = p.ip && p.fp ? th.sharedBothScore : p.fp ? th.sharedFpScore : th.sharedIpScore;
     if (p.fp && p.sameRoom) score += 10;
-    if (fees > 0) score += p.fp ? 15 : 10;
+    // One browser and any value between them is telling. One IP alone is not: a mobile carrier puts strangers behind
+    // one address, and one of them eating the other, even a big coin once or twice, is ordinary play (the integrity
+    // simulation with 30 strangers on one IP sees pairs move 2 entry fees in one or two rounds). It counts only from
+    // the thresholds of the pair-transfer detector: a net flow one way of at least `pairMinNetFees`, in at least
+    // `pairMinRounds` rounds.
+    if (fees > 0 && (p.fp || (netFees >= th.pairMinNetFees && netRounds >= th.pairMinRounds))) score += p.fp ? 15 : 10;
     const [a, b] = pk.split('|');
     const what = p.ip && p.fp ? 'IP and browser' : p.fp ? 'browser' : 'IP';
     const arenas = [...p.arenas];
@@ -338,7 +357,7 @@ export function detectSharedDevice(snap: IntegritySnapshot, th: IntegrityThresho
       beneficiary: null,
       arenaId: arenas.length === 1 ? arenas[0] : null,
       summary: `${short(a)} and ${short(b)} played the same arena at the same time from one ${what}${fees > 0 ? `, and value moved between them (${round3(fees)} entry fees)` : ''}.`,
-      evidence: { sameIp: p.ip, sameBrowser: p.fp, sameInstance: p.sameRoom, overlapS: Math.round(p.overlapMs / 1000), valueBetweenFees: round3(fees), arenas },
+      evidence: { sameIp: p.ip, sameBrowser: p.fp, sameInstance: p.sameRoom, overlapS: Math.round(p.overlapMs / 1000), valueBetweenFees: round3(fees), netValueFees: round3(netFees), netRounds, arenas },
     });
   }
   return out;

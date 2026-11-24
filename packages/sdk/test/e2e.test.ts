@@ -213,7 +213,7 @@ describe('e2e on a hardhat node', () => {
     for (const call of createDefaultArenaCalls(arena, c.decimals)) await send(admin.address, call);
     const arenas = await listArenas(client, arena);
     expect(arenas.map((a) => a.id)).toEqual([1, 2, 3, 4]);
-    expect(arenas[0]).toMatchObject({ entryFee: 1000n * T, maxSessions: 300, enabled: true, exists: true, openSessions: 0 });
+    expect(arenas[0]).toMatchObject({ entryFee: 1000n * T, maxSessions: 1500, enabled: true, exists: true, openSessions: 0 });
     expect(createDefaultArenaCalls(arena, 18, arenas.map((a) => a.id))).toEqual([]);
   }, 30_000);
 
