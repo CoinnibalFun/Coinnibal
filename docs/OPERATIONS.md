@@ -750,6 +750,19 @@ journaled as a sweep and sent with `sweepLoot(arenaId, sweepId, amount)`, which 
 - `sweepLoot` is capped only by the vault (the same trust as a payout): **protect the server key**.
 - Unplayed tickets are cancelled with their full entry fee after `STALE_SESSION_AFTER_S` (15 minutes).
 
+## Map sizes
+
+Every room's square map grows with the people in it: side = base + per person × people, at most max
+(`packages/shared/src/map-scale.ts`; PROJECT.md section 2.2.2). Defaults for every room kind: base 8,000, **80 per
+person** (until 2026-11-24: 40), max 12,000: 25 people 10,000, a full arena instance (50) 12,000. Food, cacti and
+power-ups follow the area, capped at 4,000 food, 40 cacti and 6 power-up slots. `/admin` → Game → Maps changes them per
+room kind (`/api/admin/maps`, stored in `DATA_DIR/site/maps.json`).
+
+A server whose admin ever saved the map sizes has every kind written to `maps.json`, with the per-person value of
+that time: it **keeps 40 per person** after the update. To take the new default, set **Per person** to 80 for each
+kind in Game → Maps and save (applies at once; an arena takes a smaller size only at its next round start). A server
+without `maps.json` follows the new default at once.
+
 ## Custom rooms and practice with bots
 
 `/admin` → Game → **Custom rooms** (`/api/admin/custom-rooms`, `DATA_DIR/site/custom-rooms-settings.json`): creating
