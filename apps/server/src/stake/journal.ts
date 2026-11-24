@@ -58,6 +58,11 @@ export interface SettlementItem {
   /** When this server first broadcast a transaction with this item (Unix ms): from then on it may be settled by us. */
   sentAt?: number;
   /**
+   * The transactions this server broadcast with this item (newest last, at most `SENT_TX_KEPT`): after a restart that
+   * lost a receipt, the one that settled the ticket is still found and booked (settled log, the player's notice).
+   */
+  sentTxs?: string[];
+  /**
    * A stale cancel of a ticket that was never seated while its arena was open (not a closed arena's refund): a
    * no-show. Too many in a day and the wallet gets no join permit for a while (`JoinPermits`).
    */
@@ -123,6 +128,9 @@ export const itemAmount = (item: JournalItem): number => (item.kind === 'sweep' 
 
 /** `held.flags` of an item the chain worker's payout guard held (`EvmChain`). */
 export const PAYOUT_GUARD_FLAG = 'payout_guard';
+
+/** Transactions kept per settlement (`SettlementItem.sentTxs`). */
+const SENT_TX_KEPT = 4;
 
 export const sweepKey = (roomId: string, round: number): string => `sweep:${roomId}:${round}`;
 
@@ -465,6 +473,18 @@ export class Journal {
         p.sentAt = at;
         changed = true;
       }
+    }
+    if (changed) this.persist();
+  }
+
+  /** Records the transaction just broadcast with these settlements (`SettlementItem.sentTxs`). */
+  markSettleTx(keys: readonly string[], txHash: string): void {
+    const want = new Set(keys);
+    let changed = false;
+    for (const p of this.pendingItems) {
+      if (p.kind !== 'settle' || !want.has(p.key) || p.sentTxs?.includes(txHash)) continue;
+      p.sentTxs = [...(p.sentTxs ?? []), txHash].slice(-SENT_TX_KEPT);
+      changed = true;
     }
     if (changed) this.persist();
   }
