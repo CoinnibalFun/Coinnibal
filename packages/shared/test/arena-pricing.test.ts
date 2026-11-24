@@ -201,3 +201,52 @@ describe('arenaPriceDiff: the admin sync', () => {
     expect(none[0]).toMatchObject({ newEntry: null, entryChange: false, error: expect.stringMatching(/no USD price/) });
   });
 });
+
+describe('arenaPriceDiff: entry fees the game server can book', () => {
+  const arena = (id: number): ChainArenaState => ({ id, exists: true, entryFee: 1_000n * E18, maxSessions: 300, enabled: true, openSessions: 0, holdersOnly: id === 4 });
+  const arenas = [arena(1), arena(2), arena(3), arena(4)];
+
+  it('refuses an entry fee with more than 6 decimals of an 18-decimal token (the ledger would round every ticket down)', () => {
+    // $12.34 a token with 6 figures: $1 = 0.0810373 tokens -> 81,037,300,000,000,000 base units, below the ledger's 10^12 step
+    const rows = arenaPriceDiff({ tiers: ARENA_PRICING_DEFAULT.tiers, price: parseUsdPrice('12.34'), decimals: 18, sigFigs: 6, arenas, holderNft: true });
+    expect(usdToTokenRaw(100, parseUsdPrice('12.34'), 18, 6) % 10n ** 12n).not.toBe(0n);
+    expect(rows[0]).toMatchObject({ newEntry: null, entryChange: false, error: expect.stringMatching(/more than 6 decimals/) });
+    // fewer figures: whole ledger units again, the sync goes through
+    const two = arenaPriceDiff({ tiers: ARENA_PRICING_DEFAULT.tiers, price: parseUsdPrice('12.34'), decimals: 18, sigFigs: 2, arenas, holderNft: true });
+    expect(two.every((r) => r.error === null && r.newEntry! % 10n ** 12n === 0n)).toBe(true);
+    // a token with at most 6 decimals is always whole ledger units
+    const six = arenaPriceDiff({ tiers: ARENA_PRICING_DEFAULT.tiers, price: parseUsdPrice('12.34'), decimals: 6, sigFigs: 6, arenas, holderNft: true });
+    expect(six.every((r) => r.error === null)).toBe(true);
+  });
+
+  it('sweep: prices from 1e-12 to 1e5 dollars a token, every tier and figure count: bookable, ordered, within the rounding', () => {
+    const prices: string[] = [];
+    for (let e = -12; e <= 5; e++) for (const m of [1, 2.5, 7.37]) prices.push((m * 10 ** e).toFixed(Math.max(0, 15 - Math.max(e, 0))).replace(/\.?0+$/, ''));
+    let refused = 0;
+    let priced = 0;
+    for (const text of prices) {
+      const price = parseUsdPrice(text);
+      for (let sig = 1; sig <= 6; sig++) {
+        const rows = arenaPriceDiff({ tiers: ARENA_PRICING_DEFAULT.tiers, price, decimals: 18, sigFigs: sig, arenas, holderNft: true });
+        let prev = 0n;
+        for (const r of rows) {
+          if (r.newEntry === null) {
+            refused++;
+            expect(r.error).toBeTruthy();
+            continue;
+          }
+          priced++;
+          expect(r.newEntry % 10n ** 12n).toBe(0n);
+          // within half a step of the exact amount: relative error at most 5 * 10^-sig (plus the float of the display)
+          expect(Math.abs(r.newUsd! - r.usdCents / 100) / (r.usdCents / 100)).toBeLessThanOrEqual(5 * 10 ** -sig + 1e-6);
+          // the ladder keeps its order ($1 <= $3 <= $5 <= $10)
+          expect(r.newEntry >= prev).toBe(true);
+          prev = r.newEntry;
+        }
+      }
+    }
+    // only the expensive end is refused (entries finer than a ledger unit)
+    expect(refused).toBeGreaterThan(0);
+    expect(priced).toBeGreaterThan(refused);
+  });
+});
