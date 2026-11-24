@@ -16,7 +16,8 @@
  *   shared the card. 400 `bad_post` (not a post link, or its author is not the card's handle); 422 `post_unverified`
  *   (X has no public post there, or the post does not carry the card's link `/appetizer/<code>`). When X cannot be
  *   reached, or only answers without expanded links, the link is kept anyway with `verified: false` (the visitor is
- *   not blocked; the admin checks those by hand); `x_unreachable` is reserved for a future strict mode and not sent.
+ *   not blocked; the admin checks those by hand), except over a card's verified post: that one is never replaced by a
+ *   link X cannot check (503 `x_unreachable`, the verified post kept).
  * - `GET /api/appetizer/post` → `AppetizerOurPostResponse`: our X post (`SiteSettings.appetizerPostUrl`, never any
  *   other) as X's public embed endpoint shows it, for the sheet's post box; `post: null` while no post is set or X
  *   cannot show it (the box then links to X only). Read from X at most every few minutes (cached).

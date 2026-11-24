@@ -38,6 +38,12 @@ import { SiteFail, obj } from './validate';
 const CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 /** Writes wait this long after a change (a burst of claims or image views is one write). */
 const SAVE_EVERY_MS = 1000;
+/**
+ * A change of the view counts only is written this long after it: the file is the whole list (about 25 MB at 100k
+ * cards, a write blocks the main thread for ~150 ms), and image fetches are not limited once a card is cached, so a
+ * flood of them must not rewrite it every second. A crash loses at most this much of the view counts.
+ */
+const VIEWS_SAVE_EVERY_MS = 60_000;
 const RENDERS_PER_MIN = 30;
 /** Renders a minute for the whole server (as the share cards: a crowd of IPs cannot turn drawing into a CPU flood). */
 const RENDERS_PER_MIN_ALL = 120;
@@ -145,6 +151,8 @@ export class AppetizerService {
   private next = 1;
   private dirty = false;
   private saveTimer: NodeJS.Timeout | null = null;
+  /** When the pending write runs (Unix ms of `Date.now`), while `saveTimer` is set. */
+  private saveAt = 0;
   private readonly png = new Map<string, Buffer>();
   private readonly renders = new Limiter(RENDERS_PER_MIN, 60_000);
   private readonly rendersAll = new Limiter(RENDERS_PER_MIN_ALL, 60_000);
@@ -223,10 +231,15 @@ export class AppetizerService {
     }
   }
 
-  private changed(): void {
+  /** Marks the cards for a write within `delayMs` (an earlier pending write stays; a later one is brought forward). */
+  private changed(delayMs = SAVE_EVERY_MS): void {
     this.dirty = true;
     if (!this.d.path) return;
-    this.saveTimer ??= setTimeout(() => this.flush(), SAVE_EVERY_MS);
+    const at = Date.now() + delayMs;
+    if (this.saveTimer && this.saveAt <= at) return;
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    this.saveAt = at;
+    this.saveTimer = setTimeout(() => this.flush(), delayMs);
     this.saveTimer.unref?.();
   }
 
@@ -277,6 +290,11 @@ export class AppetizerService {
     const verified = await this.checkPost(e, post.url);
     // the card may have gone while X was read
     if (this.byCode.get(code) !== e) throw new SiteFail(404, 'not_found', 'No such card.');
+    // anyone may send a link for a card (its code is in the public share link): a link X could not check never
+    // replaces a verified post (X down, or its read budget spent by a flood, must not unverify someone's card)
+    if (!verified && e.post && e.postVerified && e.post !== post.url) {
+      throw new SiteFail(503, 'x_unreachable', 'X did not answer, so that link cannot be checked now. Your card keeps its verified post; try again later.', 'url');
+    }
     if (e.post !== post.url || e.postVerified !== verified) {
       e.post = post.url;
       e.postedAt = this.now();
@@ -503,7 +521,7 @@ export class AppetizerService {
 
   private viewed(e: AppetizerEntry): void {
     e.views++;
-    this.changed();
+    this.changed(VIEWS_SAVE_EVERY_MS);
   }
 
   /** No canvas here: the site's own Open Graph picture, so a shared link still shows an image. */
