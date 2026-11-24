@@ -2,8 +2,11 @@ import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ChainGateway } from '../src/chain/types';
 import { Limiter } from '../src/net/limiter';
 import { AppetizerService } from '../src/site/appetizer';
+import type { ContractsStore } from '../src/site/contracts';
+import { FaucetInfo } from '../src/site/network';
 import type { XPostRead } from '../src/xlink';
 import { testSigner } from './signers';
 
@@ -48,6 +51,46 @@ describe('security audit: Appetizer image views', () => {
     s.claim(testSigner().address, 'second_2');
     vi.advanceTimersByTime(1_100);
     expect(new AppetizerService({ path: file, baseUrl: () => 'https://coinnibal.fun' }).total).toBe(2);
+  });
+});
+
+describe('security audit: GET /api/site/faucet and the RPC budget', () => {
+  const TOKEN = '0x00000000000000000000000000000000000000aa';
+  const faucet = (read: () => Promise<unknown>, clock: { t: number }) => {
+    const chain = {
+      status: () => ({ chainId: 46630, faucetUrl: null }),
+      evm: () => ({ testTokenFaucet: read }),
+    } as unknown as ChainGateway;
+    const contracts = { effective: () => ({ token: { address: TOKEN } }) } as unknown as ContractsStore;
+    return new FaucetInfo({ chain, contracts, now: () => clock.t });
+  };
+
+  it('a failed read is not tried again by every visitor (5 public eth_calls each, at the joins priority)', async () => {
+    const clock = { t: 1_000_000 };
+    let calls = 0;
+    const f = faucet(async () => {
+      calls++;
+      throw new Error('rpc busy');
+    }, clock);
+    for (let i = 0; i < 20; i++) expect((await f.get()).amount).toBeNull();
+    expect(calls).toBe(1);
+    // tried again after a short while
+    clock.t += 60_000;
+    await f.get();
+    expect(calls).toBe(2);
+  });
+
+  it('visitors arriving together share one read', async () => {
+    const clock = { t: 1_000_000 };
+    let calls = 0;
+    const f = faucet(async () => {
+      calls++;
+      await new Promise((r) => setTimeout(r, 20));
+      return { amount: 10n, holderAmount: 20n, cooldownSecs: 60, holderNft: null };
+    }, clock);
+    const all = await Promise.all(Array.from({ length: 25 }, () => f.get()));
+    expect(calls).toBe(1);
+    expect(all.every((x) => x.amount === '10')).toBe(true);
   });
 });
 
