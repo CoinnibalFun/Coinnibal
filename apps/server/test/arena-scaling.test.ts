@@ -64,7 +64,7 @@ describe('arena scaling settings', () => {
   it('validates every field, keeps min <= max and the hysteresis gap low < high', () => {
     const d = ARENA_SCALING_DEFAULT;
     expect(applyArenaScaling(d, { maxInstances: 8, highPct: 90 })).toEqual({ ok: true, settings: { ...d, maxInstances: 8, highPct: 90 } });
-    expect(applyArenaScaling(d, { minInstances: 7 })).toMatchObject({ ok: false, field: 'minInstances' });
+    expect(applyArenaScaling(d, { minInstances: 7, maxInstances: 5 })).toMatchObject({ ok: false, field: 'minInstances' });
     expect(applyArenaScaling(d, { lowPct: 80 })).toMatchObject({ ok: false, field: 'lowPct' });
     expect(applyArenaScaling(d, { fullHits: 0 })).toMatchObject({ ok: false, field: 'fullHits' });
     expect(applyArenaScaling(d, { windowMin: 2.5 })).toMatchObject({ ok: false, field: 'windowMin' });

@@ -374,10 +374,10 @@ that is a repeated no-show (`no_show`, "from your network"), one with its share 
   permits never refuse anyone.
 - **The new wallets' share** (round 4, R3-M2). Wallets without standing together hold at most
   `JOIN_PERMIT_FRESH_SHARE` (0.5) of min(the arena's cap, its `maxSessions`) of the arena's permits not played yet
-  (150 of 300 by default: the cap, 50 seats × 6 instances, is below the default 1,500 `maxSessions`), from however many networks they come; past it a new wallet hears "many new players are
+  (750 of 1,500 by default: the cap, 50 seats × 30 instances, equals the default 1,500 `maxSessions`), from however many networks they come; past it a new wallet hears "many new players are
   buying tickets for this room, try again in a minute". The other half stays open to players with standing. Half,
   because a launch of new players must still fill an arena: a permit is played (seated) about a minute after it is
-  asked and leaves the share then, so 300 new players fill the 300 seats within the first minutes of a round's
+  asked and leaves the share then, so new players fill the seats within the first minutes of a round's
   4-minute join window. A new wallet must also hold the entry fee (`no_funds`), so a permit that could buy nothing
   holds no share.
 - **No-shows.** A ticket the stale sweeper cancels at its entry fee because it was never seated while its arena was
@@ -717,11 +717,13 @@ call once; tickets bought before it keep the pair they joined with.
 
 A fresh deploy creates each arena with **1,500** open tickets (`DEFAULT_ARENAS[*].maxSessions`; the contract allows
 2 to 2,000). It is the on-chain ceiling on tickets bought and not yet settled; the seats the server runs are the
-arena instances (`ARENA_INSTANCE_CAP` × `maxInstances`, 300 by default, "Arena instances"), and join permits count
+arena instances (`ARENA_INSTANCE_CAP` × `maxInstances`, 1,500 by default, "Arena instances"), and join permits count
 min(that cap, `maxSessions`). Arenas created earlier (300 each) **keep their on-chain value** until the owner changes
 it: `/admin` → Game → the arena contract → **Create or update an arena**: the arena id, entry fee left blank (kept), **Max open tickets**
 1500, Enabled as it is now, **Preview update**, sign. One owner transaction per arena (`updateArena(id, sameEntry,
-1500, enabled)`); allowed while tickets are open, since the entry fee does not change. Nothing else moves: prices,
+1500, enabled)`); allowed while tickets are open, since the entry fee does not change. The seat side: a server
+whose arena scaling was never saved in admin uses the new default `maxInstances` 30 (50 × 30 = 1,500 seats an arena);
+one that saved it keeps its value, so raise **Max instances** to 30 in admin → Game → Arena scaling too. Nothing else moves: prices,
 fees, payouts and vaults stay as they are.
 
 ## Resetting the leaderboards
@@ -876,7 +878,7 @@ are on. The scaler (`apps/server/src/rooms/arena-scaler.ts`, rules in
 | Setting | Default | Range |
 |---|---|---|
 | Scale ahead of demand (`enabled`; off: overflow only, and only empty extra instances close) | on | on / off |
-| `minInstances` / `maxInstances` per arena | 1 / 6 | 1..10 / 1..20 |
+| `minInstances` / `maxInstances` per arena | 1 / 30 | 1..10 / 1..40 |
 | `fullHits` in `windowMin` | 3 in 10 min | 1..50 / 1..120 |
 | `highPct` for `sustainMin` | 80 % for 2 min | 10..100 / 1..60 |
 | `lowPct` for `lowMin` | 35 % for 10 min | 0..90 / 1..240 |
