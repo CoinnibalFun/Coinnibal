@@ -11,8 +11,11 @@ import { clamp } from './formulas';
  * largest side. Food, rug cacti and power-ups follow the area at a practice pond's density (`worldForSide`, food
  * capped by `MAP_WORLD_CAPS`).
  *
- * Defaults (2026-11 owner: maps stay roomy and grow with every person): base 8000, 40 per person, max 12000.
- * 1 person 8040, 25 people 9000, 40 (a full pond) 9600, 50 (a full arena instance) 10000, 100 and more 12000.
+ * Defaults (2026-11 owner: maps stay roomy and grow with every person): base 8000, 80 per person, max 12000.
+ * 1 person 8080, 25 people 10000, 40 (a full pond) 11200, 50 (a full arena instance) and more 12000. The sides stay
+ * within 8000..12000 as before, so the population caps (`MAP_WORLD_CAPS`) are unchanged: a 12000 room holds 4000
+ * food (the cap; about 80 a person at 50), 40 cacti and 6 power-up slots. A server whose admin saved map sizes
+ * (`DATA_DIR/site/maps.json`) keeps them.
  * The custom room sizes XS..XL (3000..9000) are chosen sizes and do not follow the model.
  *
  * When the side changes (`Room`): it grows during play by at most `MAP_GROW.maxStep` every `MAP_GROW.stepMs`.
@@ -41,13 +44,13 @@ export const MAP_SCALE_FIELDS = ['auto', 'base', 'perPlayer', 'max'] as const;
  */
 export const MAP_SPACE = 12_000;
 
-/** Sides are rounded up to a multiple of this (a step every person or two at the default growth). */
+/** Sides are rounded up to a multiple of this (several steps a person at the default growth). */
 export const MAP_SIDE_STEP = 10;
 
 /** Bounds of the admin values. */
 export const MAP_SCALE_LIMITS = { perPlayerMin: 0, perPlayerMax: 300, sideMin: 2000, sideMax: MAP_SPACE } as const;
 
-export const MAP_SCALE_DEFAULT: MapScaleSettings = { auto: true, base: 8000, perPlayer: 40, max: 12_000 };
+export const MAP_SCALE_DEFAULT: MapScaleSettings = { auto: true, base: 8000, perPlayer: 80, max: 12_000 };
 
 /**
  * Pacing of growth during play: the room re-checks its expected count every `checkMs`, and grows by
