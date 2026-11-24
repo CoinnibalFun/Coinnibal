@@ -2,9 +2,11 @@
  * Round / room lifecycle and failure recovery: what must still hold on the slow paths (a reorg noticed only after
  * the stale sweeper already read the ticket closed, a restart between a send and its receipt, ...).
  */
-import { mkdtempSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { SessionInfo } from '@coinnibal/sdk';
 import type { Hash } from 'viem';
 import { generatePrivateKey } from 'viem/accounts';
@@ -12,6 +14,8 @@ import { describe, expect, it } from 'vitest';
 import { EvmChain } from '../src/chain/evm';
 import { sessionKey, type SettledEvent } from '../src/chain/types';
 import { loadConfig } from '../src/config';
+import { healthReport } from '../src/health';
+import type { RoomManager } from '../src/rooms/manager';
 import { Journal, type SettlementItem } from '../src/stake/journal';
 import { ARENA, E18, FakeEvm } from './fake-evm';
 import { testSigner } from './signers';
@@ -98,5 +102,80 @@ describe('reorg protection outlives the first stale sweep', () => {
     await h.chain.processPending();
     expect(calls(h.evm, 'settle')).toHaveLength(2);
     expect(calls(h.evm, 'cancel')).toHaveLength(0);
+  });
+});
+
+describe('deploys and reboots wait out the paid ticket rooms (they play on their own clock)', () => {
+  it('/api/health names the end of the last open paid ticket room', () => {
+    const cfg = loadConfig({} as NodeJS.ProcessEnv);
+    const room = (opts: Record<string, unknown>) => ({ opts });
+    const rooms = {
+      pool: null,
+      online: () => 0,
+      roomCount: 3,
+      customRooms: () => [
+        room({ mode: 'arena', code: 'AAAA', custom: {}, stake: { arenaId: 1 }, ownRound: { startsAt: T0, endsAt: T0 + 30 * 60_000 } }),
+        room({ mode: 'arena', code: 'BBBB', custom: {}, stake: { arenaId: 2 }, ownRound: { startsAt: T0, endsAt: T0 + 50 * 60_000 } }),
+        room({ mode: 'private', code: 'CCCC', custom: {} }),
+      ],
+    } as unknown as RoomManager;
+    const r = healthReport({ cfg, rooms, chain: { enabled: false } as never, startedAt: T0, now: T0 });
+    expect(r.paidRooms).toEqual({ open: 2, endsAt: T0 + 50 * 60_000 });
+    expect(r.ok).toBe(true);
+    const none = healthReport({ cfg, rooms: { ...rooms, customRooms: () => [] } as unknown as RoomManager, chain: { enabled: false } as never, startedAt: T0, now: T0 });
+    expect(none.paidRooms).toEqual({ open: 0, endsAt: null });
+  });
+
+  // wait_for_round_break of deploy/vps/lib.sh with docker, the clock and sleep faked: the app answers the room's end
+  // (ms) until it is over. Returns the log lines and the fake time it returned at.
+  function waitForBreak(opts: { endsAtS: number | null; nowS: number; waitS?: number }): { out: string; at: number } {
+    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+    const tmp = mkdtempSync(join(tmpdir(), 'coinnibal-break-'));
+    const env = join(tmp, '.env');
+    writeFileSync(env, 'ROUND_SECONDS=300\nROUND_BREAK_SECONDS=30\n');
+    const script = [
+      'set -euo pipefail',
+      `export COINNIBAL_ENV='${env}'`,
+      `. '${join(repoRoot, 'deploy/vps/lib.sh')}'`,
+      ...(opts.waitS !== undefined ? [`PAID_ROOM_WAIT_S=${opts.waitS}`] : []),
+      `now=${opts.nowS}`,
+      `ends=${opts.endsAtS ?? ''}`,
+      'dc() { echo cid; }',
+      'docker() { if [[ "$1" == exec && -n "$ends" ]] && ((now < ends + 5)); then printf %s "$((ends * 1000))"; fi; return 0; }',
+      'date() { if [[ "$*" == "+%s" ]]; then echo "$now"; else command date "$@"; fi; }',
+      'sleep() { now=$((now + ${1%.*} + 1)); }',
+      'log() { printf "%s\\n" "$*"; }',
+      'wait_for_round_break',
+      'echo "AT $now"',
+    ].join('\n');
+    const r = spawnSync('bash', ['-c', script], { encoding: 'utf8' });
+    expect(r.status, r.stderr).toBe(0);
+    return { out: r.stdout, at: Number(/AT (\d+)/.exec(r.stdout)?.[1]) };
+  }
+
+  const CYCLE = 330;
+  // 100 s into a round: well inside the play
+  const mid = 1_800_000_000 - (1_800_000_000 % CYCLE) + 100;
+  const inBreak = (t: number) => t % CYCLE >= 2 && t % CYCLE <= 22;
+
+  it('without a paid room: the next arena break, as before', () => {
+    const r = waitForBreak({ endsAtS: null, nowS: mid });
+    expect(r.out).not.toMatch(/paid ticket room/);
+    expect(r.out).toMatch(/in the break after the bell/);
+    expect(inBreak(r.at)).toBe(true);
+  });
+
+  it('a paid room open past the next arena break: the swap waits for its end, then for the arena break after it', () => {
+    const ends = mid + 900;
+    const r = waitForBreak({ endsAtS: ends, nowS: mid });
+    expect(r.out).toMatch(/a paid ticket room plays until .* UTC; waiting for its end/);
+    expect(r.at).toBeGreaterThan(ends);
+    expect(inBreak(r.at)).toBe(true);
+  });
+
+  it('never waits past PAID_ROOM_WAIT_S', () => {
+    const r = waitForBreak({ endsAtS: mid + 3_600, nowS: mid, waitS: 0 });
+    expect(r.out).toMatch(/still plays after 0 min of waiting; going on/);
+    expect(r.at).toBeLessThan(mid + 3_600);
   });
 });

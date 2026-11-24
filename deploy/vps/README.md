@@ -167,8 +167,9 @@ pays its last ticket in about 17 s instead of 65 s (`scripts/bench/bell-burst.ts
   main && git reset --hard origin/main && deploy/vps/compose.sh up -d --build`. `update.sh` leaves it in place (the
   deployed commit it remembers is still the green one) and deploys normally again once CI marks a newer commit.
 - **In the round break.** The new image is built while the old container serves; the swap waits for the break after
-  an arena bell (no live stake then: SIGTERM mid-round would cash every arena player out). `COINNIBAL_DEPLOY_NOW=1
-  coinnibal-update` skips the wait for an urgent fix.
+  an arena bell (no live stake then: SIGTERM mid-round would cash every arena player out). A paid ticket room plays
+  one game on its own clock, so the swap first waits for the last open one to end (`paidRooms` in `/api/health`; at
+  most 70 minutes, `PAID_ROOM_WAIT_S`). `COINNIBAL_DEPLOY_NOW=1 coinnibal-update` skips the wait for an urgent fix.
 - **Rollback.** Before every deploy's build the running image is tagged `elymum-app:previous` (its commit in
   `/var/lib/elymum/previous`; `coinnibal-status` shows both): the version before the last deploy. When the new
   container is not healthy (the liveness check) within 60 s, `update.sh` puts the previous image and commit back at
