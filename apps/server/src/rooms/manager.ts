@@ -51,10 +51,10 @@ export interface CustomRoomHooks {
   seatable?(code: string): boolean;
 }
 
-/** A paid custom room: an invite-only arena instance (`priv-<CODE>`, mode `arena`), never matched by quick play. */
 /** A room in a worker that was asked to close (an idle cleanup) or is gone: it takes no new join. */
 const closingRemote = (r: RoomHandle): boolean => r instanceof RemoteRoom && (r.closing || r.closed);
 
+/** A paid custom room: an invite-only arena instance (`priv-<CODE>`, mode `arena`), never matched by quick play. */
 export function isPaidCustom(opts: Pick<RoomOptions, 'mode' | 'code'>): boolean {
   return opts.mode === 'arena' && !!opts.code;
 }
