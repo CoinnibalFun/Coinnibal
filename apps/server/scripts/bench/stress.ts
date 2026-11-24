@@ -31,11 +31,11 @@
  *
  * Env: STRESS_PHASES, STRESS_STAGES (100,500,1000,1500), STRESS_STAGE_S (40), STRESS_MIX (arena,practice,test,
  * private shares; 40,45,10,5), STRESS_STORM (500), STRESS_SLOW (50), STRESS_HTTP_RPS (40), STRESS_ROUND_S (120), STRESS_CLOSE_S (joins close this long before the bell; 20),
- * STRESS_PROCS (client processes; one per 300 players, at least 2), STRESS_OUT (JSON report), STRESS_SHED (the load shedder, 1; 0 on a shared machine for the scaling phases), STRESS_PROF (a directory: the server writes a CPU profile per thread there), GAME_WORKERS (3),
+ * STRESS_PROCS (client processes; one per 300 players, at least 2), STRESS_OUT (JSON report), STRESS_LOG (the server's log, appended to this file), STRESS_SHED (the load shedder, 1; 0 on a shared machine for the scaling phases), STRESS_PROF (a directory: the server writes a CPU profile per thread there), GAME_WORKERS (3),
  * MAX_CONNECTIONS (1500), PRACTICE_CAPACITY, ARENA_INSTANCE_CAP.
  */
 import { fork, type ChildProcess } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { cpus, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -108,26 +108,44 @@ async function startServer(): Promise<number> {
   const t0 = Date.now();
   const child = fork(join(here, 'drill-server.ts'), [], { execArgv: ['--import', 'tsx', '--import', join(here, 'tick-probe.ts'), ...(process.env.STRESS_PROF ? ['--cpu-prof', `--cpu-prof-dir=${process.env.STRESS_PROF}`] : [])], env, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
   const onLine = (b: Buffer) => {
-    for (const l of b.toString().split('\n')) if (l.trim()) serverLog.push(l);
+    for (const l of b.toString().split('\n')) {
+      if (!l.trim()) continue;
+      serverLog.push(l);
+      if (process.env.STRESS_LOG) appendFileSync(process.env.STRESS_LOG, `${l}\n`);
+    }
   };
   child.stdout!.on('data', onLine);
   child.stderr!.on('data', onLine);
   server = child;
+  let up = false;
   await new Promise<void>((resolve, reject) => {
-    child.on('message', (m: { t: string }) => m.t === 'ready' && resolve());
-    child.on('exit', (code) => reject(new Error(`server exited ${code} during start`)));
+    child.on('message', (m: { t: string }) => {
+      if (m.t !== 'ready') return;
+      up = true;
+      resolve();
+    });
+    child.on('exit', (code, signal) => {
+      if (!up) reject(new Error(`server exited ${code ?? signal} during start`));
+      else if (!stopping) {
+        problem(`the server exited by itself (${code ?? signal}); last lines: ${serverLog.slice(-8).join(' | ')}`);
+        server = null;
+      }
+    });
   });
   say(`server up on :${port} in ${Date.now() - t0} ms (workers ${WORKERS})`);
   return port;
 }
 
+let stopping = false;
 async function stopServer(): Promise<number> {
   const s = server!;
+  stopping = true;
   const t0 = Date.now();
   const done = new Promise<void>((r) => s.on('exit', () => r()));
   s.kill('SIGTERM');
   await done;
   server = null;
+  stopping = false;
   return Date.now() - t0;
 }
 
@@ -142,7 +160,8 @@ interface LoadReply {
 }
 
 function ask<T>(t: string, extra: Record<string, unknown> = {}): Promise<T> {
-  const s = server!;
+  const s = server;
+  if (!s || !s.connected) return Promise.reject(new Error('the server is not running'));
   return new Promise((resolve) => {
     const on = (m: { t: string }) => {
       if (m.t !== t) return;
@@ -373,7 +392,12 @@ async function check(phase: string, r?: LoadReply) {
   const ids = r.rooms.map((x) => x.id);
   if (new Set(ids).size !== ids.length) problem(`${phase}: duplicate room ids in the directory`);
   for (const x of r.rooms) if (x.players > x.maxPlayers) problem(`${phase}: ${x.id} holds ${x.players} people for ${x.maxPlayers} seats`);
-  const api = (await (await fetch(`http://127.0.0.1:${port}/api/rooms`, { headers: { 'X-Forwarded-For': '192.168.200.1' } })).json()) as { rooms: RoomInfo[] };
+  let api: { rooms: RoomInfo[] } = { rooms: [] };
+  try {
+    api = (await (await fetch(`http://127.0.0.1:${port}/api/rooms`, { headers: { 'X-Forwarded-For': '192.168.200.1' }, signal: AbortSignal.timeout(15_000) })).json()) as { rooms: RoomInfo[] };
+  } catch (err) {
+    problem(`${phase}: /api/rooms did not answer (${(err as Error).message})`);
+  }
   const apiIds = new Set(api.rooms.map((x) => x.id));
   // /api/rooms is cached for up to a second: allow rooms that opened or closed meanwhile, but never a duplicate
   if (apiIds.size !== api.rooms.length) problem(`${phase}: duplicate room ids in /api/rooms`);
