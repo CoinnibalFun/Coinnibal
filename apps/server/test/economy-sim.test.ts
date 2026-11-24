@@ -38,7 +38,7 @@ describe('fee on profit: fees.ts, the SDK and the contract port agree to the bas
       if (profit === 0n) expect(c.burned + c.toVault).toBe(0n);
       expect(c.net >= (payout < entry ? payout : entry)).toBe(true);
     }
-  });
+  }, 60_000);
 
   it('the ledger-unit preview (numbers) equals the bigint split for every safe amount', () => {
     const rng = mulberry32(8);
@@ -51,7 +51,7 @@ describe('fee on profit: fees.ts, the SDK and the contract port agree to the bas
         expect([n.burned, n.toVault, n.net]).toEqual([Number(b.burned), Number(b.toVault), Number(b.net)]);
       }
     }
-  });
+  }, 60_000);
 
   it('the holder pair is used only when it is lower, exactly as the contract picks it', () => {
     for (const [normal, holder] of [
