@@ -5,12 +5,14 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PROTOCOL_VERSION, decodeSnapshot, type ServerMessage, type SnapshotData } from '@coinnibal/shared';
+import { PROTOCOL_VERSION, RULES, TICK_MS, decodeSnapshot, speedForRadius, type ServerMessage, type SnapshotData } from '@coinnibal/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';
 import { NullChain } from '../src/chain/types';
 import { loadConfig } from '../src/config';
+import { mulberry32 } from '../src/game/rng';
+import { World } from '../src/game/world';
 import { VIEWPORT_MIN_MS } from '../src/net/gateway';
 
 let app: App;
@@ -52,6 +54,55 @@ function open(): Promise<Client> {
     ws.once('error', reject);
   });
 }
+
+describe('audit: server authority over movement and actions (checked, clean)', () => {
+  const world = () => new World({ width: 4000, height: 4000, foodTarget: 0, virusTarget: 0, maxPowerUps: 0, powerUps: false, coinRain: false, seed: 7 });
+
+  it('no stream of inputs moves a coin faster than its size allows: spam, flips, huge and invalid aims', () => {
+    const w = world();
+    const p = w.addPlayer({ name: 'speeder', skin: 1, x: 2000, y: 2000, mass: 30, spawnShield: false });
+    const cap = speedForRadius(p.cells[0].r) * (TICK_MS / 1000) + 1e-9;
+    const rng = mulberry32(3);
+    for (let t = 0; t < 300; t++) {
+      const c = p.cells[0];
+      const before = { x: c.x, y: c.y };
+      // a modified client: dozens of aims per tick, far away, flipping, non-finite and huge
+      for (let k = 0; k < 40; k++) {
+        const r = rng();
+        if (r < 0.2) w.setTarget(p.id, Number.NaN, Infinity);
+        else if (r < 0.4) w.setTarget(p.id, 3.4e38 * (rng() < 0.5 ? 1 : -1), -3.4e38);
+        else w.setTarget(p.id, c.x + (rng() - 0.5) * 1e6, c.y + (rng() - 0.5) * 1e6);
+      }
+      w.tick(TICK_MS);
+      expect(Math.hypot(c.x - before.x, c.y - before.y)).toBeLessThanOrEqual(cap);
+      expect(Number.isFinite(c.x) && Number.isFinite(c.y)).toBe(true);
+      // the aim never leaves the world by more than its margin
+      expect(Math.abs(p.targetX - 2000)).toBeLessThanOrEqual(2000 + 2000);
+    }
+  });
+
+  it('split and eject spam: two splits a tick at most, one eject per cooldown, never past 16 pieces', () => {
+    const w = world();
+    const p = w.addPlayer({ name: 'spammer', skin: 1, x: 2000, y: 2000, mass: 4000, spawnShield: false });
+    w.setTarget(p.id, 3000, 2000);
+    for (let t = 0; t < 30; t++) {
+      const cells = p.cells.length;
+      for (let k = 0; k < 50; k++) w.queueSplit(p.id);
+      w.tick(TICK_MS);
+      // each split pass at most doubles the pieces
+      expect(p.cells.length).toBeLessThanOrEqual(Math.min(RULES.maxCells, cells * 4));
+    }
+    expect(p.cells.length).toBeLessThanOrEqual(RULES.maxCells);
+    const t0 = w.now;
+    for (let t = 0; t < 30; t++) {
+      for (let k = 0; k < 50; k++) w.queueEject(p.id);
+      w.tick(TICK_MS);
+    }
+    const ejectRounds = Math.floor((w.now - t0) / RULES.ejectCooldownMs) + 1;
+    // one eject per cell per cooldown, however many the client sends
+    expect(w.ejects.length).toBeLessThanOrEqual(ejectRounds * RULES.maxCells);
+  });
+});
 
 describe('audit: a client flipping its viewport every frame sees a square of the wide side around its coin (fixed)', () => {
   it('a viewport change takes effect at most once per VIEWPORT_MIN_MS; the newest one still lands', async () => {
