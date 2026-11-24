@@ -429,7 +429,7 @@ export class GameEngine {
     this.wasArena = null;
     useUi.setState({
       screen: 'roundover',
-      roundResult: { kind, round, payout, stats, standings },
+      roundResult: { kind, round, payout, stats, standings, room: useUi.getState().room },
       // this result's card (`share`) comes just before this message; an older one must not stand in for it
       share: freshResult(useUi.getState().share),
       powerups: [],
@@ -751,7 +751,7 @@ export class GameEngine {
         this.wasArena = null;
         useUi.setState({
           screen: 'dead',
-          death: { stats: m.stats, killer: m.killer, killerSkin: m.killerSkin },
+          death: { stats: m.stats, killer: m.killer, killerSkin: m.killerSkin, room: useUi.getState().room },
           powerups: [],
           boosts: null,
           chatOpen: false,
