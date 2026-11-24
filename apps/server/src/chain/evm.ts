@@ -1425,6 +1425,8 @@ export class EvmChain implements ChainGateway {
       return;
     }
     for (const c of send) this.sentTx.set(c.item.key, hash);
+    // on disk too: a restart before the receipt still finds the transaction that settled the ticket (`dropFinished`)
+    this.journal.markSettleTx(send.map((c) => c.item.key), hash);
     if (this.feeHeld) {
       this.feeHeld = false;
       this.log('chain: settle batches go through again — settlements resume');
@@ -1472,11 +1474,8 @@ export class EvmChain implements ChainGateway {
       this.journal.retryLater(item.key, why, this.now());
       return false;
     }
-    this.sentTx.delete(item.key);
-    this.journal.remove(item.key);
-    this.log(
-      `chain: dropping settlement ${short(item.key)} for ${short(item.player)} — ${s.id === c.sessionId ? 'already finalized (the player collects)' : 'settled elsewhere'} (already settled or refunded)`,
-    );
+    // closed, but not by this batch: an earlier transaction of ours (a resend after a receipt timeout) may have settled it
+    await this.dropFinished(item, s.id === c.sessionId ? 'already finalized (the player collects)' : 'settled elsewhere');
     return false;
   }
 
@@ -1525,8 +1524,9 @@ export class EvmChain implements ChainGateway {
    * the vault.
    */
   private async dropFinished(item: SettlementItem, why: string, closed = false): Promise<void> {
-    const hash = this.sentTx.get(item.key);
-    if (hash) {
+    // this process's last send first, then what the journal kept of earlier ones (a restart forgets `sentTx`)
+    const hashes = [...new Set([this.sentTx.get(item.key), ...[...(item.sentTxs ?? [])].reverse()].filter((h): h is string => isHash(h ?? '')))] as Hash[];
+    for (const hash of hashes) {
       const receipt = await this.client!.receipt(hash, this.arena, LATE_RECEIPT_TIMEOUT_MS).catch(() => null);
       const ev = receipt?.events.find(
         (e): e is SettledLike =>

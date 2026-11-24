@@ -38,6 +38,39 @@ function item(s: SessionInfo, payout: number, overrides: Partial<SettlementItem>
 
 const calls = (evm: FakeEvm, name: string) => evm.sent.filter((c) => c.functionName === name);
 
+describe('a restart between a settlement send and its receipt', () => {
+  it('the restarted server books the earlier transaction: settled log record (reorg protection, standing) and the settled event', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-lost-receipt-'));
+    const path = join(dir, 'journal.json');
+    const evm = new FakeEvm();
+    const a = await harness({ STALE_SESSION_AFTER_S: '7200' }, new Journal(path), dir, evm);
+    const winner = wallet();
+    const s = evm.join(1, winner, { openedAt: Math.floor(T0 / 1000) - 600 });
+    evm.join(1, wallet());
+    a.journal.enqueue(item(s, 2 * K));
+    // the batch is mined, but the server is killed before it sees the receipt
+    evm.holdReceipts = true;
+    await a.chain.processPending();
+    expect(calls(evm, 'settle')).toHaveLength(1);
+    expect(a.settled).toHaveLength(0);
+    await a.chain.stop();
+
+    // SIGKILL: a new process on the same DATA_DIR, the receipt is there now
+    evm.holdReceipts = false;
+    const b = await harness({ STALE_SESSION_AFTER_S: '7200' }, new Journal(path), dir, evm);
+    b.clock.now += 30_000;
+    await b.chain.processPending();
+    const key = sessionKey(1, winner, s.id);
+    expect(b.journal.pending).toHaveLength(0);
+    // never sent twice, never treated as the player's own refund
+    expect(calls(evm, 'settle')).toHaveLength(1);
+    expect(b.journal.forfeits()).toHaveLength(0);
+    // booked as this server's settlement, as if the receipt had been seen before the crash
+    expect(b.chain.settledLog.get(key, ARENA)).toMatchObject({ kind: 'settle', amount: 2 * K });
+    expect(b.settled.map((e) => [e.key, e.payout])).toEqual([[key, 2 * K]]);
+  });
+});
+
 describe('reorg protection outlives the first stale sweep', () => {
   it('a settlement reorged out after the sweeper read its ticket closed is still re-sent with the same payout', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'coinnibal-late-reorg-'));
