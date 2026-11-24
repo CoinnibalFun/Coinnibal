@@ -908,13 +908,22 @@ export class RoomManager {
     return this.createArenaInstance(arenaId, a);
   }
 
-  /** The room of `arenaId` (a public instance or a paid custom room) in which `wallet` holds a live ticket, if any. */
   /** Whether `wallet` holds a live arena coin in any room (its reconnect is admitted before anyone else). */
   holdsLiveStake(wallet: string): boolean {
-    for (const room of this.handles()) if (room.opts.mode === 'arena' && room.findStakeByWallet(wallet)) return true;
-    return false;
+    return this.liveStake(wallet) !== null;
   }
 
+  /** The live arena coin `wallet` holds in any room (an arena instance, a paid custom room, a test arena), if any. */
+  liveStake(wallet: string): { room: RoomHandle; entry: StakeSeat; arenaId: number } | null {
+    for (const room of this.handles()) {
+      if (room.opts.mode !== 'arena' || !room.opts.stake) continue;
+      const entry = room.findStakeByWallet(wallet);
+      if (entry) return { room, entry, arenaId: room.opts.stake.arenaId };
+    }
+    return null;
+  }
+
+  /** The room of `arenaId` (a public instance or a paid custom room) in which `wallet` holds a live ticket, if any. */
   findArenaStake(arenaId: number, wallet: string): { room: RoomHandle; entry: StakeSeat } | null {
     for (const room of this.ticketRooms(arenaId)) {
       const entry = room.findStakeByWallet(wallet);

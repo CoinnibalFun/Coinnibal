@@ -71,6 +71,15 @@ export class Camera {
     return Math.min(v.w, v.h);
   }
 
+  /**
+   * Visible short side (world units) for the view the server sends (its `h`, the view's height, see `viewSize`) on
+   * this screen: a paid room's spectator gets exactly the followed coin's own view (anti-ghosting), so the camera
+   * shows that and no more (past it the paper would be empty).
+   */
+  visibleShortForServer(serverH: number): number {
+    return shortForServerView(serverH, this.w / Math.max(1, this.h));
+  }
+
   wheel(deltaY: number): void {
     const f = Math.exp(-deltaY * 0.0012);
     this.userZoom = clamp(this.userZoom * f, 1 / (VIEW.serverMargin - 0.04), 1.6);
@@ -101,4 +110,26 @@ export class Camera {
     out.y1 = this.y + hh;
     return out;
   }
+}
+
+/**
+ * The short side of a server view of height `h` on a screen of `aspect` (width / height): a wide screen's height is
+ * its short side; a tall screen's short side is its width, `h × aspect` (`viewSize`, the server clamps the aspect to
+ * `VIEW.minAspect`, so a taller screen shows a little less, never past what was sent).
+ */
+export function shortForServerView(h: number, aspect: number): number {
+  if (!(h > 0)) return VIEW.base;
+  const a = Number.isFinite(aspect) && aspect > 0 ? aspect : 16 / 9;
+  return a >= 1 ? h : h * a;
+}
+
+/**
+ * The camera's visible short side while there is no own coin to follow (the lobby's live view, watching, the death
+ * screen). A paid room (`paid`: an arena instance or a paid custom room) gets exactly the server's view (`serverH`,
+ * the followed coin's own view: anti-ghosting); a free room shows the room wide like a spectator (`wide`: the lobby
+ * and the watch screen; a little inside the server's wide view) or, after a death, a mid-size coin's view.
+ */
+export function watchShort(camera: Pick<Camera, 'visibleShortFor' | 'visibleShortForServer'>, o: { paid: boolean; wide: boolean; serverH: number | null }): number {
+  if (o.paid && o.serverH !== null) return camera.visibleShortForServer(o.serverH);
+  return o.wide ? camera.visibleShortFor(0, true) * 0.85 : camera.visibleShortFor(400);
 }

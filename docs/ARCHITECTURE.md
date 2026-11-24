@@ -195,6 +195,13 @@ has more bots than its setting, nor more playing than the setting minus its peop
 - **Fair play in arenas:** only people play in the official arenas. Practice bots exist only in free custom rooms
   and in the testnet's test arenas (both: no value), see only what a player's view shows (invisible players
   excluded) and are tagged BOT.
+- **Spectators in paid rooms see no more than a player** (anti-ghosting, `Room.viewFor`): in an arena instance, a paid
+  custom room or a test arena a spectator (the lobby's live view, watching after a death) gets exactly the followed
+  coin's own view (`viewSize` for its mass and the screen shape, with a player's aspect limits and the 3 s viewport
+  throttle), a dead player's socket a new coin's view, and moving on to the next coin is limited to once per 3 s
+  (`PAID_SPECTATE_SWITCH_MS`). Two watching sockets (one wide, one tall) cannot map the arena for a colluding player.
+  Free rooms (practice ponds, free custom rooms) keep the wide spectator view (`VIEW.spectatorBase`). The web camera
+  shows a paid room's spectator exactly the view the server sends (`watchShort` in `game/camera.ts`).
 - Collusion, multi-accounting, sybil feeding, pacts and scripted input are detected off chain and shown to the owner
   (OPERATIONS.md, "Integrity"); the auto-hold (on by default on the mainnet) keeps a high-risk payout in the journal
   until the owner decides (or until `autoReleaseHours` pass: a false positive delays a payout, never loses it).
@@ -497,7 +504,10 @@ has more bots than its setting, nor more playing than the setting minus its peop
 - **Game connection** (`src/game/net.ts`, `jitter.ts`): a watchdog drops a socket that delivered no frame and no pong
   for 4 s and reconnects (backoff 0.5 s to 8 s); while it is down a blocking banner says the coin is still in the
   arena. A close with `CLOSE_REPLACED` (4000: the same wallet's newer connection took the coin) is not reconnected:
-  the player chooses "Play here". Snapshots are drawn on a steady timeline 100 ms behind the newest (a jitter buffer,
+  the player chooses "Play here". A reloaded (or reopened) page resumes a live arena coin by itself, like a
+  reconnect: the server's `authed` names the wallet's live coin (`seat: { arenaId, held }`) and the page joins it
+  (no transaction), unless another tab or window plays it right now (`held`: the lobby's "Resume" takes it over) or
+  the page is already in a game. Snapshots are drawn on a steady timeline 100 ms behind the newest (a jitter buffer,
   by server tick), and a coin keeps its last velocity up to 250 ms when the next snapshot is late
   (`apps/web/test/netsim.ts`: at 150 ms RTT and 2 % loss, about 36 freezes a minute before, none after).
 - **Copy** (`src/i18n`): English only (`locales/meta.ts`); `{chain}` names the network; ETH is written out.

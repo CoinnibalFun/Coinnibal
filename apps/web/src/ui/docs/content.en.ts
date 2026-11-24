@@ -139,7 +139,7 @@ export const docsEn = (
               { key: '1–8', action: 'Show a sticker over your coin' },
               { key: 'Enter', action: 'Open the chat' },
               { key: 'Tab (hold)', action: 'Show the standings of the room' },
-              { key: 'Q', action: 'Watch the next player (while you watch a game)' },
+              { key: 'Q', action: 'Watch the next player (while you watch a game; in a paid room at most every 3 seconds)' },
               { key: 'Esc', action: 'Close the chat or an open panel' },
             ],
           },
@@ -549,7 +549,15 @@ export const docsEn = (
             items: [
               {
                 term: 'Lost connection:',
-                text: 'your coin stays in the paid room and can still be eaten. You can come back and keep playing. If it is alive at the bell, you are paid as usual.',
+                text: 'your coin stays in the paid room and can still be eaten. The game takes you back to it by itself when the connection returns, and also when you reload the page or open the game again. If it is alive at the bell, you are paid as usual.',
+              },
+              {
+                term: 'Playing in another tab:',
+                text: 'your coin is played in one tab or window only. A second one does not take it over by itself: press "Resume" there to play it there, and the first one shows "Play here" to take it back.',
+              },
+              {
+                term: 'Watching a paid room:',
+                text: 'a watcher sees what the watched player sees, no more, so nobody can watch a paid room to help a player.',
               },
               { term: 'Ticket not played:', text: `a ticket that never entered a room is refunded in full by the server after about ${S.staleTicketMinutes} minutes.` },
               {
