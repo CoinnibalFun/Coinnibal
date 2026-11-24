@@ -386,7 +386,7 @@ export function corsAllow(corsOrigin: string, origin: string | undefined): strin
 /** Slow or idle HTTP clients (slowloris): headers within 15 s, the whole request within 30 s, idle keep-alive 5 s. */
 export const HTTP_TIMEOUTS = { headersMs: 15_000, requestMs: 30_000, keepAliveMs: 5_000, maxHeaders: 64 } as const;
 
-/** The strict CSP of the bundled web app (`WEB_DIST`). */
+/** The strict CSP of the bundled web app (`WEB_DIST`); the open-play copy sends the same one (`apps/web/vercel.json`, kept equal by a test). */
 export const WEB_CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; " +
   "connect-src 'self' https: wss:; worker-src 'self' blob:; media-src 'self' data: blob:; object-src 'none'; base-uri 'self'; " +

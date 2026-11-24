@@ -1,12 +1,15 @@
 import { CONTRACT_KINDS, isTestChainId, type FaucetConfig, type NetworkContractCheck, type NetworkInfo } from '@coinnibal/shared';
 import type { Address } from 'viem';
 import { withTimeout } from '../chain/evm-client';
+import { withRpcPriority } from '../chain/rpc-budget';
 import { isTestChain, storedChains } from '../chain/state-dir';
 import type { ChainGateway } from '../chain/types';
 import type { ContractsStore } from './contracts';
 
 const RPC_CHECK_TIMEOUT_MS = 10_000;
 const FAUCET_TTL_MS = 60_000;
+/** A failed read of the faucet settings is tried again after this (not by every visitor meanwhile). */
+const FAUCET_RETRY_MS = 15_000;
 
 /** `GET /api/admin/network`: the chain, RPC health, the server key and the chain-keyed state. */
 export async function networkInfo(d: { chain: ChainGateway; contracts: ContractsStore | null; dataDir: string | null }): Promise<NetworkInfo> {
@@ -59,6 +62,10 @@ export async function networkInfo(d: { chain: ChainGateway; contracts: Contracts
  */
 export class FaucetInfo {
   private cache: { token: string; at: number; value: FaucetConfig } | null = null;
+  /** The last failed read (its token and time): no new read before `FAUCET_RETRY_MS`. */
+  private failed: { token: string; at: number } | null = null;
+  /** The read under way: visitors arriving together share it. */
+  private reading: { token: string; p: Promise<FaucetConfig> } | null = null;
 
   constructor(
     private readonly d: { chain: ChainGateway; contracts: ContractsStore | null; now?: () => number },
@@ -83,16 +90,30 @@ export class FaucetInfo {
     if (!base.enabled) return base;
     const c = this.cache;
     if (c && c.token === token && now - c.at < FAUCET_TTL_MS) return { ...c.value };
+    // the chain is slow or the token is not the TestToken: the page still shows what is known
+    const known = (): FaucetConfig => (c && c.token === token ? { ...c.value } : base);
+    // a public page: a failed read is not repeated by every visitor (each one is five eth_calls), and visitors arriving
+    // together share one read, at low priority (joins and settlements come first)
+    if (this.failed && this.failed.token === token && now - this.failed.at < FAUCET_RETRY_MS) return known();
     const client = this.d.chain.evm?.() ?? null;
     if (!client) return base;
-    try {
-      const f = await withTimeout(client.testTokenFaucet(token as Address), RPC_CHECK_TIMEOUT_MS, 'faucet settings');
-      const value: FaucetConfig = { ...base, amount: f.amount.toString(), holderAmount: f.holderAmount.toString(), cooldownSecs: f.cooldownSecs, holderNft: f.holderNft };
-      this.cache = { token: token!, at: now, value };
-      return { ...value };
-    } catch {
-      // the chain is slow or the token is not the TestToken: the page still shows what is known
-      return c && c.token === token ? { ...c.value } : base;
+    if (this.reading?.token !== token) {
+      const p = withRpcPriority('low', () => withTimeout(client.testTokenFaucet(token as Address), RPC_CHECK_TIMEOUT_MS, 'faucet settings'))
+        .then((f): FaucetConfig => {
+          const value: FaucetConfig = { ...base, amount: f.amount.toString(), holderAmount: f.holderAmount.toString(), cooldownSecs: f.cooldownSecs, holderNft: f.holderNft };
+          this.cache = { token: token!, at: now, value };
+          this.failed = null;
+          return value;
+        })
+        .catch(() => {
+          this.failed = { token: token!, at: now };
+          return known();
+        })
+        .finally(() => {
+          if (this.reading?.p === p) this.reading = null;
+        });
+      this.reading = { token: token!, p };
     }
+    return { ...(await this.reading.p) };
   }
 }
