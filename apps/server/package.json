@@ -14,6 +14,7 @@
     "test:money": "COINNIBAL_MONEY_SIM=1 vitest run test/money-conservation.test.ts",
     "money-sim": "tsx scripts/money-sim.ts",
     "load": "node --import tsx scripts/bench/load.ts",
+    "stress": "node --import tsx scripts/bench/stress.ts",
     "typecheck": "tsc --noEmit",
     "integrity-sim": "tsx scripts/integrity-sim.ts",
     "arena-sim": "tsx scripts/arena-scaling-sim.ts",
