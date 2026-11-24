@@ -374,7 +374,7 @@ that is a repeated no-show (`no_show`, "from your network"), one with its share 
   permits never refuse anyone.
 - **The new wallets' share** (round 4, R3-M2). Wallets without standing together hold at most
   `JOIN_PERMIT_FRESH_SHARE` (0.5) of min(the arena's cap, its `maxSessions`) of the arena's permits not played yet
-  (150 of 300 by default), from however many networks they come; past it a new wallet hears "many new players are
+  (150 of 300 by default: the cap, 50 seats × 6 instances, is below the default 1,500 `maxSessions`), from however many networks they come; past it a new wallet hears "many new players are
   buying tickets for this room, try again in a minute". The other half stays open to players with standing. Half,
   because a launch of new players must still fill an arena: a permit is played (seated) about a minute after it is
   asked and leaves the share then, so 300 new players fill the 300 seats within the first minutes of a round's
@@ -416,8 +416,8 @@ that is a repeated no-show (`no_show`, "from your network"), one with its share 
 ### Security notes: what an attacker can still do with permits (residual bounds)
 
 With unbounded fresh identities nothing can be prevented entirely; the rules make an attack cost far more than it
-costs the players, and never lock out a player with standing. Defaults, one arena of 300 places (cap = `maxSessions` =
-300), a stale cycle of about 20 minutes (15 minutes plus up to 5 of sweep):
+costs the players, and never lock out a player with standing. Defaults, one arena of 300 places (cap = 300, below its
+`maxSessions` of 1,500), a stale cycle of about 20 minutes (15 minutes plus up to 5 of sweep):
 
 - **New players kept out of one arena with tickets nobody plays**: 150 unplayed tickets per cycle (the new wallets'
   share). Each wallet makes 3 no-shows a day, each IPv4 address 9 and each /24 or /48 24, and one /24 holds 16 of the
@@ -712,6 +712,17 @@ minute; the log says `arena #N: ticket price … on chain`). Re-sync whenever th
 **The holder pair** (holders pay 10 % of their profit): Setup → Holder perks → `setHolderPerks(<CoinnibalNFT>, 800, 200)`
 (Finish setup does it on a fresh deploy). An arena deployed earlier with the old suggestion (1,500 + 0) needs this
 call once; tickets bought before it keep the pair they joined with.
+
+### Max open tickets per arena
+
+A fresh deploy creates each arena with **1,500** open tickets (`DEFAULT_ARENAS[*].maxSessions`; the contract allows
+2 to 2,000). It is the on-chain ceiling on tickets bought and not yet settled; the seats the server runs are the
+arena instances (`ARENA_INSTANCE_CAP` × `maxInstances`, 300 by default, "Arena instances"), and join permits count
+min(that cap, `maxSessions`). Arenas created earlier (300 each) **keep their on-chain value** until the owner changes
+it: `/admin` → Game → the arena contract → **Create or update an arena**: the arena id, entry fee left blank (kept), **Max open tickets**
+1500, Enabled as it is now, **Preview update**, sign. One owner transaction per arena (`updateArena(id, sameEntry,
+1500, enabled)`); allowed while tickets are open, since the entry fee does not change. Nothing else moves: prices,
+fees, payouts and vaults stay as they are.
 
 ## Resetting the leaderboards
 

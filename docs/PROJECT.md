@@ -167,7 +167,7 @@ Tickets are priced in US dollars; the chain keeps the entry fee in tokens, and t
 token's USD price from `/admin` (ECONOMY.md section 1).
 
 Ids 1 to 4, created from `/admin` → Setup → Finish setup (or `pnpm admin create-arena --defaults`) once the token is
-set, 300 open tickets each; the $10 Room is for NFT holders. Each arena runs as 50-player instances on the same vault:
+set, 1,500 open tickets each; the $10 Room is for NFT holders. Each arena runs as 50-player instances on the same vault:
 another opens when they keep filling up, a quiet one drains (no new seats) and closes after its bell, nobody evicted
 (OPERATIONS.md, "Arena instances").
 

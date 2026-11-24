@@ -180,7 +180,7 @@ one by one, with a transaction preview each, stay under **Advanced → Setup** (
    Until it is set the arenas show "Opening soon" and only practice runs. Right after it is set, the panel asks you
    to **sign the site pins again** (the token joins them; Setup → Site pins otherwise).
 7. **Create the four arenas** (needs the token): the $1 / $3 / $5 / $10 tiers, created at 1,000 / 3,000 / 5,000 /
-   10,000 tokens (the reference price $0.001 a token), 300 open tickets each; the $10 Room is for NFT holders.
+   10,000 tokens (the reference price $0.001 a token), 1,500 open tickets each (the contract allows up to 2,000); the $10 Room is for NFT holders.
    Then price them at the token's real USD price: Game → Arena prices → set the price, sync, sign (OPERATIONS.md,
    "Arena prices in US dollars"). The lobby opens them within about a minute.
 
