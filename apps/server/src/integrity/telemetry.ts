@@ -15,6 +15,11 @@ const FEED_GAP = 900;
 /** Approach samples kept per ticket (the last few seconds before a death). */
 const APPROACH_KEEP = 16;
 const APPROACH_WINDOW_MS = 3000;
+/**
+ * A coin whose aim is closer than this to its centre is at rest (the world eases a coin to a stop over its last 48
+ * units): it heads nowhere, whatever its last aim's direction was.
+ */
+const AT_REST = 24;
 /** Wallets kept in a ticket's eject `eatenBy` map. */
 const EJECT_EATERS_MAX = 8;
 
@@ -289,6 +294,17 @@ export class IntegrityMonitor {
       if (!tr || p.afk) continue;
       const ax = this.bufX[i];
       const ay = this.bufY[i];
+      // where the coin heads now: its aim from where it is now. The last input's direction goes stale once the coin
+      // reached its aim (an unchanged aim sends nothing new), and a coin at rest heads nowhere
+      const hx = p.targetX - ax;
+      const hy = p.targetY - ay;
+      if (hx * hx + hy * hy >= AT_REST * AT_REST) {
+        tr.headingX = hx;
+        tr.headingY = hy;
+      } else {
+        tr.headingX = 0;
+        tr.headingY = 0;
+      }
       const am = this.bufM[i];
       const ar = this.bufR[i];
       let threat = -1;
