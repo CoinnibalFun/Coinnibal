@@ -34,6 +34,11 @@ export interface SimOptions {
    * reach (default 0).
    */
   keyboard?: number;
+  /**
+   * The first N honest stakers play from one IP address (a mobile carrier's NAT: strangers on one address, each with
+   * their own browser), default 0.
+   */
+  carrierIp?: number;
   /** Attach the integrity telemetry (default true). */
   integrity?: boolean;
   /** Round length (default 60 s, joins close 15 s before the bell). */
@@ -134,6 +139,7 @@ export function runIntegritySim(o: SimOptions = {}): SimResult {
     nextScriptAt: 0,
   });
   for (let i = 0; i < (o.honest ?? 12); i++) clients.push(mk(i, false));
+  for (let i = 0; i < Math.min(o.carrierIp ?? 0, clients.length); i++) clients[i].conn = fakeConn(clients[i].wallet, '100.64.0.1');
   for (let i = 0; i < (o.scripted ?? 0); i++) clients.push(mk(i, true));
   for (let i = 0; i < (o.keyboard ?? 0); i++) clients.push(mk(i, false, true));
   for (const c of clients) {
@@ -319,6 +325,9 @@ function main(): void {
   const t0 = performance.now();
   on.integrity!.scan();
   console.log(`full detector scan: ${(performance.now() - t0).toFixed(1)} ms`);
+  const carrier = runIntegritySim({ ...base, carrierIp: base.honest });
+  console.log(`all ${base.honest} honest stakers behind one carrier IP: ${carrier.flags.length} flag(s), ${carrier.transfers} value transfers`);
+  for (const f of carrier.flags) console.log(`  ${f.kind} ${f.score}: ${f.summary}`);
   const cheat = runIntegritySim({ minutes, seed, honest: 12, scripted: 2 });
   console.log(`with 2 scripted bots: ${cheat.flags.length} flag(s)`);
   for (const f of cheat.flags) console.log(`  ${f.kind} ${f.score}: ${f.summary}`);

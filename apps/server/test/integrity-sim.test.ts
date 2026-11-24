@@ -14,6 +14,13 @@ describe('integrity simulation (scripts/integrity-sim.ts)', () => {
     }
   }, 180_000);
 
+  it('strangers behind one carrier IP (one address, their own browsers) raise no flag when they eat each other', () => {
+    const r = runIntegritySim({ minutes: 5, seed: 2, honest: 20, carrierIp: 20 });
+    expect(r.transfers).toBeGreaterThan(0);
+    expect(r.flags.map((f) => `${f.kind}: ${f.summary}`)).toEqual([]);
+    expect(r.journal.held()).toEqual([]);
+  }, 180_000);
+
   it('people who steer with the move keys (eight directions, the aim at full reach) raise no flag either', () => {
     const r = runIntegritySim({ minutes: 4, seed: 3, honest: 6, keyboard: 4 });
     expect(r.tickets).toBeGreaterThan(10);
