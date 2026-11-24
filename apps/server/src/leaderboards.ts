@@ -244,7 +244,6 @@ export class Leaderboards {
   /** Persists if anything changed (call periodically). */
   flush(): void {
     if (!this.dirty || !this.path) return;
-    mkdirSync(dirname(this.path), { recursive: true });
     const tmp = `${this.path}.tmp`;
     const data: LbFile = {
       epoch: this.epoch,
@@ -257,9 +256,15 @@ export class Leaderboards {
       ...(this.resetAt !== null ? { resetAt: this.resetAt } : {}),
       ...(this.resetBy !== null ? { resetBy: this.resetBy } : {}),
     };
-    writeFileSync(tmp, JSON.stringify(data));
-    renameSync(tmp, this.path);
-    this.dirty = false;
+    // a full or failing disk must not throw out of a save timer (an uncaught exception stops the server)
+    try {
+      mkdirSync(dirname(this.path), { recursive: true });
+      writeFileSync(tmp, JSON.stringify(data));
+      renameSync(tmp, this.path);
+      this.dirty = false;
+    } catch (err) {
+      console.warn(`leaderboards: could not save (${(err as Error)?.message ?? err}); kept in memory, retried at the next save`);
+    }
   }
 }
 

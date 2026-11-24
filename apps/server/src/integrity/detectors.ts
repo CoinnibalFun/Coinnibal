@@ -758,8 +758,9 @@ export function detectNonAggression(snap: IntegritySnapshot, _th: IntegrityThres
     // both directions: the pair's samples within range, either one the bigger
     const back = nearPair.get(`${a}>${b}`);
     const samples = e.samples + (back?.samples ?? 0);
+    if (samples < cfg.naMinSamples) continue;
     const rounds = new Set([...e.rounds, ...(back?.rounds ?? [])]);
-    if (samples < cfg.naMinSamples || rounds.size < cfg.naMinRounds) continue;
+    if (rounds.size < cfg.naMinRounds) continue;
     // each wallet's eat rate per sample within range of anyone else
     const rate = (w: string, pairSamples: number) => ((eats.get(w) ?? 0) + 1) / (Math.max(0, (nearOf.get(w) ?? 0) - pairSamples) + 600);
     const expected = rate(b, e.samples) * e.samples + (back ? rate(a, back.samples) * back.samples : 0);

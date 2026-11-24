@@ -71,6 +71,8 @@ const STOP_GRACE_MS = 5_000;
 const INDEX_LOOKBACK_BLOCKS = 1_000_000n;
 /** Concurrent session reads of the stale sweeper (merged into one multicall where the RPC allows it). */
 const READ_CONCURRENCY = 40;
+/** How long the stale sweeper keeps re-reading a ticket after this server's confirmed settlement closed it (reorgs). */
+const REORG_WATCH_MS = 30 * 60_000;
 /** The open-ticket index reads new `Joined` logs on demand (`refreshTicketIndex`: a fresh buyer's join) at most this often. */
 export const TICKET_INDEX_REFRESH_MS = 4_000;
 /** The confirmed settlements, cancels and loot burns (`DATA_DIR/chains/<id>/settled.jsonl`). */
@@ -222,6 +224,13 @@ export class EvmChain implements ChainGateway {
 
   /** Open-session index for the stale sweeper (from `Joined` logs). */
   private index: { next: bigint | null; candidates: Map<string, { arenaId: number; player: Address; sessionId: bigint }> } = { next: null, candidates: new Map() };
+  /**
+   * Tickets the sweeper read closed whose close is this server's own confirmed settlement or cancel (the settled log),
+   * kept for `REORG_WATCH_MS` after it: the `Joined` scan never meets them again, so without this a reorg noticed after
+   * the first sweep that read them closed would leave the ticket open for good (the winner refunded at the entry fee
+   * after 24 h, its result lost). Re-read by every sweep; open again, they go back to the candidates.
+   */
+  private reorgWatch = new Map<string, { arenaId: number; player: Address; sessionId: bigint }>();
   /** The on-demand scan of new `Joined` logs in flight (`refreshTicketIndex`), and when the last one started (wall clock). */
   private indexRefresh: Promise<void> | null = null;
   private indexRefreshAt = -Infinity;
@@ -451,6 +460,7 @@ export class EvmChain implements ChainGateway {
       this.authorized = null;
       this.arenaCache = null;
       this.index = { next: null, candidates: new Map() };
+      this.reorgWatch.clear();
       this.updateStakeEnabled();
     }
     if (!this.arena) {
@@ -1415,6 +1425,8 @@ export class EvmChain implements ChainGateway {
       return;
     }
     for (const c of send) this.sentTx.set(c.item.key, hash);
+    // on disk too: a restart before the receipt still finds the transaction that settled the ticket (`dropFinished`)
+    this.journal.markSettleTx(send.map((c) => c.item.key), hash);
     if (this.feeHeld) {
       this.feeHeld = false;
       this.log('chain: settle batches go through again — settlements resume');
@@ -1462,11 +1474,8 @@ export class EvmChain implements ChainGateway {
       this.journal.retryLater(item.key, why, this.now());
       return false;
     }
-    this.sentTx.delete(item.key);
-    this.journal.remove(item.key);
-    this.log(
-      `chain: dropping settlement ${short(item.key)} for ${short(item.player)} — ${s.id === c.sessionId ? 'already finalized (the player collects)' : 'settled elsewhere'} (already settled or refunded)`,
-    );
+    // closed, but not by this batch: an earlier transaction of ours (a resend after a receipt timeout) may have settled it
+    await this.dropFinished(item, s.id === c.sessionId ? 'already finalized (the player collects)' : 'settled elsewhere');
     return false;
   }
 
@@ -1515,8 +1524,9 @@ export class EvmChain implements ChainGateway {
    * the vault.
    */
   private async dropFinished(item: SettlementItem, why: string, closed = false): Promise<void> {
-    const hash = this.sentTx.get(item.key);
-    if (hash) {
+    // this process's last send first, then what the journal kept of earlier ones (a restart forgets `sentTx`)
+    const hashes = [...new Set([this.sentTx.get(item.key), ...[...(item.sentTxs ?? [])].reverse()].filter((h): h is string => isHash(h ?? '')))] as Hash[];
+    for (const hash of hashes) {
       const receipt = await this.client!.receipt(hash, this.arena, LATE_RECEIPT_TIMEOUT_MS).catch(() => null);
       const ev = receipt?.events.find(
         (e): e is SettledLike =>
@@ -1758,7 +1768,7 @@ export class EvmChain implements ChainGateway {
     const now = this.now();
     const staleAfterS = this.staleAfterS();
     const enqueue: SettlementItem[] = [];
-    const todo = [...this.index.candidates.entries()];
+    const todo = [...this.index.candidates.entries(), ...[...this.reorgWatch.entries()].filter(([k]) => !this.index.candidates.has(k))];
     for (let i = 0; i < todo.length; i += READ_CONCURRENCY) {
       await Promise.all(
         todo.slice(i, i + READ_CONCURRENCY).map(async ([key, c]) => {
@@ -1772,8 +1782,14 @@ export class EvmChain implements ChainGateway {
           // closed, re-opened (a newer key is indexed) or finalized (the player collects): not stale
           if (s.id !== c.sessionId || s.finalized) {
             this.index.candidates.delete(key);
+            // closed by our own confirmed transaction a moment ago: watched a while longer (a reorg can still open it)
+            const rec = s.id === 0n || s.id === c.sessionId ? this.settledLog.get(key, this.arena!) : undefined;
+            if (rec && rec.kind !== 'sweep' && now - rec.at < REORG_WATCH_MS) this.reorgWatch.set(key, c);
+            else this.reorgWatch.delete(key);
             return;
           }
+          // open (again): an ordinary candidate from here on
+          if (this.reorgWatch.delete(key)) this.index.candidates.set(key, c);
           if (s.id > BigInt(Number.MAX_SAFE_INTEGER)) return;
           // only a record of THIS arena contract: a new contract restarts the session ids, so an earlier contract's
           // record of the same `<arenaId>:<player>:<sessionId>` describes another ticket (2026-11 audit S1)

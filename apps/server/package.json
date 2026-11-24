@@ -14,13 +14,15 @@
     "test:money": "COINNIBAL_MONEY_SIM=1 vitest run test/money-conservation.test.ts",
     "money-sim": "tsx scripts/money-sim.ts",
     "load": "node --import tsx scripts/bench/load.ts",
+    "stress": "node --import tsx scripts/bench/stress.ts",
     "typecheck": "tsc --noEmit",
     "integrity-sim": "tsx scripts/integrity-sim.ts",
     "arena-sim": "tsx scripts/arena-scaling-sim.ts",
     "e2e": "tsx scripts/e2e.ts",
     "nft:report": "tsx scripts/nft/report.ts",
     "nft:sheets": "tsx scripts/nft/sheets.ts",
-    "econ-sim": "tsx scripts/mainnet-econ-sim.ts"
+    "econ-sim": "tsx scripts/mainnet-econ-sim.ts",
+    "econ-mc": "tsx scripts/economy-sim.ts"
   },
   "dependencies": {
     "@coinnibal/art": "workspace:*",

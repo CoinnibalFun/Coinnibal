@@ -113,16 +113,42 @@ host_journald() {
   fi
 }
 
+# how long a deploy or reboot waits at most for the open paid ticket rooms to end (wait_for_round_break): 70 min, a
+# room of the longest duration (60 min) opened just before plus its close. The units' TimeoutStartSec and the other
+# jobs' lock waits leave room for it
+PAID_ROOM_WAIT_S="${PAID_ROOM_WAIT_S:-4200}"
+
+# the end (Unix ms) of the last paid ticket room open in the running app (/api/health `paidRooms.endsAt`, asked inside
+# the container: the app port is not published); empty when none is open or the app does not answer
+paid_rooms_until() {
+  local cid
+  cid="$(dc ps -q app 2>/dev/null || true)"
+  [[ -n "$cid" ]] || return 0
+  docker exec "$cid" node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8787)+'/api/health').then(r=>r.json()).then(j=>process.stdout.write(String(j.paidRooms&&j.paidRooms.endsAt||''))).catch(()=>{})" 2>/dev/null || true
+}
+
 # Waits for the break after an arena bell. Rounds are aligned to Unix time: one cycle is ROUND_SECONDS of play
 # (default 300) plus the ROUND_BREAK_SECONDS break after its bell (default 30; unset, at most a tenth of the play;
 # set, at most the play), so the slots are [n x cycle, (n + 1) x cycle) and each starts with the break: the bell
 # rings at a multiple of the cycle and the floor reopens ROUND_BREAK_SECONDS later (apps/server/src/config.ts
 # parseRoundConfig, packages/shared/src/rounds.ts roundAt). Stopping the server there finds no live stake (every
-# ticket was just settled at the bell); anywhere else SIGTERM cashes every arena player out mid-round.
+# ticket was just settled at the bell; first the open paid ticket rooms, on their own clock, are waited out);
+# anywhere else SIGTERM cashes every arena player out mid-round.
 # COINNIBAL_DEPLOY_NOW=1 skips the wait (an urgent fix; ELYMUM_DEPLOY_NOW=1 of before the rename too).
 wait_for_round_break() {
   [[ "${COINNIBAL_DEPLOY_NOW:-${ELYMUM_DEPLOY_NOW:-0}}" == "1" ]] && return 0
-  local round brk cycle s last
+  local round brk cycle s last until_ms deadline=$((SECONDS + PAID_ROOM_WAIT_S))
+  # a paid ticket room plays ONE game on its own clock (up to an hour): an arena break is no break for it, and SIGTERM
+  # would cash its players out mid-game. Wait until the last open one has ended (its own bell settles its tickets), at
+  # most PAID_ROOM_WAIT_S, then for the arena break as usual
+  while until_ms="$(paid_rooms_until)" && [[ "$until_ms" =~ ^[0-9]+$ ]] && ((until_ms + 15000 > $(date +%s) * 1000)); do
+    if ((SECONDS >= deadline)); then
+      log "a paid ticket room still plays after $((PAID_ROOM_WAIT_S / 60)) min of waiting; going on (its players are paid their current value)"
+      break
+    fi
+    log "a paid ticket room plays until $(date -u -d "@$((until_ms / 1000))" +%T 2>/dev/null || echo "$until_ms") UTC; waiting for its end"
+    sleep 15
+  done
   round="$(env_get ROUND_SECONDS)"
   [[ "$round" =~ ^[0-9]+$ ]] || round=300
   ((round < 2)) && round=2

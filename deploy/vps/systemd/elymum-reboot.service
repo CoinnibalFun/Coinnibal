@@ -7,5 +7,5 @@ After=docker.service
 [Service]
 Type=oneshot
 ExecStart=/opt/elymum/deploy/vps/reboot.sh
-# the lock (30 min at most), the round break (11 min at most) and an engine upgrade
-TimeoutStartSec=60min
+# the lock (2 h at most), an open paid ticket room (70 min at most), the round break (11 min at most) and an engine upgrade
+TimeoutStartSec=4h
