@@ -1,5 +1,5 @@
 // Drawing kit for the Coinnibal brand renders, in the "Ring Storybook" language of
-// docs/design/storybook-reference.html and docs/specs/2026-10-29-elymum-on-elysium.md (section 6):
+// docs/design/storybook-reference.html:
 // ink outlines (#04181C), flat cel fills with one shade tone, hard offset shadows (no blur), cream
 // die-cut stickers, Fraunces (display, SOFT 100), DM Sans (reading), Geist Mono (numbers, kickers).
 // Everything is inline: fonts come from the web app's @fontsource-variable packages as data URIs

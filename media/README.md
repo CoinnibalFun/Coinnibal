@@ -34,7 +34,7 @@ palette (`#04181C` ink, cream, sun, cyan, teal, trench night) and type (Fraunces
 `apps/web`'s `@fontsource-variable` packages). The captured films (gameplay, how-to-play, the promo's footage) record
 the real UI, so they pick up the new interface on their own, but only once it has landed:
 
-1. Wait until the new web UI (spec section 6) is in `apps/web`, then re-take the captures
+1. Wait until the new web UI (the Ring Storybook design, docs/design/storybook-reference.html) is in `apps/web`, then re-take the captures
    (`media/gameplay/capture/take-all.sh` against `pnpm demo`). The capture kit's selectors and the
    `window.__coinnibal*` dev globals must match the new UI; fix them in `gameplay/capture/lib.mjs` first.
 2. Re-synthesise every voice line (the scripts changed; the old takes in `cache/` are stale) and check

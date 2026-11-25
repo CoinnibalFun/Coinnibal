@@ -1,11 +1,9 @@
-# Coinnibal: the whole project on one page
+# Coinnibal project overview
 
 Coinnibal is a cute coin-eats-coin arena game on **Robinhood Chain** (an Arbitrum Orbit L2, gas token **ETH**). The
 money rules live in Solidity contracts, the game runs on an authoritative server, and a **Coinnibal NFT** opens the
-game (no visitor copy names a mint price; the visitor site says the public mint will be on OpenSea). This page
-explains how the game plays, how money moves, how the code is laid out and how it is run. Details:
-[ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY.md), [RESEARCH.md](RESEARCH.md) (the specs under
-`docs/specs/` are historical: they describe the earlier Elysium build).
+game. This page explains how the game plays, how money moves, how the code is laid out and how it is run. Details:
+[ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY.md), [RESEARCH.md](RESEARCH.md).
 
 > **Status (2026-11-18).** Coinnibal runs on **Robinhood Chain only**: Robinhood Chain Testnet (46630) now, Robinhood
 > Chain (4663) later, switched with `CHAIN_ID`. The arena contract is v3 (no fee on the ticket; 20 % of a ticket's profit:
@@ -30,8 +28,7 @@ explains how the game plays, how money moves, how the code is laid out and how i
   break; a ticket bought then is held and seated when the next round opens).
 - The NFT: the Coinnibal NFT (an emblem), minted in ETH at the owner's USD target (`MINT_USD_CENTS`: no visitor
   page shows it, and `GET /api/site/mint` leaves it out while the mint page is closed), allowlist first, then public.
-  The public mint is planned on OpenSea (the link @coinnibalfun posts); how that sale and the contract's own phases
-  and `/mint` fit together is an open owner decision. The owner decides who may play: admins only, NFT holders, or
+  Mint details are announced on X ([@coinnibalfun](https://x.com/coinnibalfun)). The owner decides who may play: admins only, NFT holders, or
   everyone.
 - The token is set after deploy: until the owner sets it on the arena (once), the arenas read "Opening soon".
 
@@ -365,7 +362,7 @@ Details: [OPERATIONS.md](OPERATIONS.md#integrity-cheat-and-collusion-detection).
 
 ## 9. Brand
 
-- Look: "Ring Storybook" (spec section 6; reference `docs/design/storybook-reference.html`): a picture book of the
+- Look: "Ring Storybook" (reference `docs/design/storybook-reference.html`): a picture book of the
   ring habitat, ink outlines `#04181C`, flat cel colour with one shade, hard offset shadows, cream die-cut stickers,
   coins with faces; day = the plain at dawn, night = in orbit.
 - Palette (`packages/shared/src/palette.ts`): teal `#2D7388`, cyan `#34B7DD`, sun `#F2C14E`, up `#3C9A87`, cream
