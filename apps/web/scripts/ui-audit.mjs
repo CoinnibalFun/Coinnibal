@@ -48,7 +48,7 @@ const list = (n, d) => (opt(n, d) || '').split(',').filter(Boolean);
 const SERVER_PORT = Number(opt('--server-port', '8899'));
 const WEB_PORT = Number(opt('--web-port', '5199'));
 const BASE = opt('--base', `http://localhost:${WEB_PORT}`).replace(/\/$/, '');
-const OUT_ROOT = resolve(opt('--out', '/home/user/Solagel/out/work/ui-audit'));
+const OUT_ROOT = resolve(opt('--out', resolve(import.meta.dirname, '../../../out/work/ui-audit')));
 const LABEL = opt('--label', 'run');
 const OUT = join(OUT_ROOT, LABEL);
 const WORKERS = Number(opt('--workers', '3'));
