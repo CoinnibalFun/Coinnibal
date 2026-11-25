@@ -3,8 +3,7 @@
 The social and web art of Coinnibal, drawn in the **Ring Storybook** language: confident ink outlines
 (`#04181C`), flat cel fills with one shade tone, hard offset shadows (never blurred), cream die-cut
 stickers, Fraunces for display, DM Sans for reading and Geist Mono for every number and kicker. The
-source of truth is the spec (`docs/specs/2026-10-29-elymum-on-elysium.md`, section 6) and the
-reference page `docs/design/storybook-reference.html`; the drawings here are copied from it.
+source of truth is the reference page `docs/design/storybook-reference.html`; the drawings here are copied from it.
 
 Everything is generated from code. Change a template, run the generator, look at the PNGs.
 

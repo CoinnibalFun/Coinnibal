@@ -102,5 +102,5 @@ the final minute, the last gulp, the bell and the receipt) and `spill` (eaten, b
 - The rivals (`mochi_moon`, `bonk_bae`, `lil_wei`, `rug_ruth`, `pixel_penny`) are real wallets
   with real (fake-chain) tickets, played by the capture script.
 - The end card reads the site's host (`SITE_HOST`, the `PUBLIC_URL` host; default coinnibal.fun) and @coinnibalfun (X).
-- Colours follow the Ring Storybook palette (spec section 6.3, `packages/shared/src/palette.ts`);
+- Colours follow the Ring Storybook palette (`packages/shared/src/palette.ts`);
   `motion/` repeats the hex values under the old names, so update both when the palette moves.

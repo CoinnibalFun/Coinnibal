@@ -13,7 +13,6 @@ backups, one-command install): [deploy/vps/README.md](../deploy/vps/README.md). 
 
 Day-to-day running: [OPERATIONS.md](OPERATIONS.md) (with the step-by-step testnet deploy). How the money moves:
 [ARCHITECTURE.md](ARCHITECTURE.md). The economy: [ECONOMY.md](ECONOMY.md). Chain facts: [RESEARCH.md](RESEARCH.md).
-(The specs under `docs/specs/` are historical: they describe the earlier Elysium build.)
 
 ## The order
 
