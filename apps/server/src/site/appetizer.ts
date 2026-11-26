@@ -57,6 +57,14 @@ const POST_RE = /^https:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 /** "0042". */
+/**
+ * One-off redates run once at startup (recorded in the file): card `no`, when claimed in [`from`, `until`), takes the
+ * startup time as its date. For cards claimed before the admin's Redate existed.
+ */
+const ONE_OFF_FIXES: readonly { id: string; no: number; from: number; until: number }[] = [
+  { id: 'redate-0003-2026-11', no: 3, from: Date.UTC(2026, 10, 21), until: Date.UTC(2026, 10, 26) },
+];
+
 export const appetizerNo = (no: number): string => String(no).padStart(4, '0');
 
 /** The validated wallet (EIP-55) of a claim; a 400 `bad_wallet` otherwise. */
@@ -152,6 +160,8 @@ export class AppetizerService {
   /** The next card's number (a deleted card's number is never handed out again). */
   private next = 1;
   private dirty = false;
+  /** One-off data fixes already applied to the stored cards (`ONE_OFF_FIXES`), kept in the file so each runs once. */
+  private fixes = new Set<string>();
   private saveTimer: NodeJS.Timeout | null = null;
   /** When the pending write runs (Unix ms of `Date.now`), while `saveTimer` is set. */
   private saveAt = 0;
@@ -201,7 +211,7 @@ export class AppetizerService {
     const p = this.d.path;
     if (!p || !existsSync(p)) return;
     try {
-      const raw = JSON.parse(readFileSync(p, 'utf8')) as { next?: unknown; cards?: unknown };
+      const raw = JSON.parse(readFileSync(p, 'utf8')) as { next?: unknown; cards?: unknown; fixes?: unknown };
       if (!raw || typeof raw !== 'object' || !Array.isArray(raw.cards)) throw new Error('no card list');
       for (const c of raw.cards) {
         const e = entryOf(c);
@@ -210,11 +220,27 @@ export class AppetizerService {
       }
       const maxNo = this.cards.reduce((m, e) => Math.max(m, e.no), 0);
       this.next = Math.max(maxNo + 1, typeof raw.next === 'number' && Number.isInteger(raw.next) ? raw.next : 1);
+      if (Array.isArray(raw.fixes)) for (const f of raw.fixes) if (typeof f === 'string') this.fixes.add(f);
+      this.applyFixes();
     } catch (err) {
       // keep the unreadable file for the operator and start fresh
       const backup = `${p}.corrupt-${Date.now()}`;
       renameSync(p, backup);
       this.log(`appetizer: ${p} unreadable (${(err as Error).message}); moved to ${backup}`);
+    }
+  }
+
+  /** Runs each one-off fix not yet recorded in the file, as the admin's Redate would. */
+  private applyFixes(): void {
+    for (const f of ONE_OFF_FIXES) {
+      if (this.fixes.has(f.id)) continue;
+      const e = this.cards.find((c) => c.no === f.no && c.at >= f.from && c.at < f.until);
+      if (e) {
+        e.at = this.now();
+        this.log(`appetizer: one-off fix ${f.id}: card No. ${appetizerNo(e.no)} redated`);
+      }
+      this.fixes.add(f.id);
+      this.changed();
     }
   }
 
@@ -234,7 +260,7 @@ export class AppetizerService {
     this.dirty = false;
     try {
       mkdirSync(dirname(p), { recursive: true });
-      writeFileSync(`${p}.tmp`, JSON.stringify({ v: 1, next: this.next, cards: this.cards }), { mode: 0o600 });
+      writeFileSync(`${p}.tmp`, JSON.stringify({ v: 1, next: this.next, cards: this.cards, ...(this.fixes.size ? { fixes: [...this.fixes] } : {}) }), { mode: 0o600 });
       renameSync(`${p}.tmp`, p);
     } catch (err) {
       this.dirty = true;
