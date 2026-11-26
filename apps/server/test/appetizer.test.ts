@@ -427,6 +427,23 @@ describe('the Appetizer: limits and fallbacks', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it('runs a one-off redate once: card No. 3 claimed on 22 Nov 2026 takes the startup time, others stay', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-appetizer-fix-'));
+    const file = join(dir, 'appetizers.json');
+    const nov22 = Date.UTC(2026, 10, 22, 15);
+    const card = (no: number, at: number) => ({ code: `FixCard00${no}`, no, handle: `fan_${no}`, at, wallet: testSigner().address, post: null, postedAt: null, views: 0 });
+    writeFileSync(file, JSON.stringify({ v: 1, next: 4, cards: [card(1, nov22), card(2, nov22), card(3, nov22)] }));
+    const t1 = Date.UTC(2026, 10, 26, 12);
+    const s = new AppetizerService({ path: file, baseUrl: () => '', now: () => t1 });
+    expect(s.list().items.map((e) => [e.no, e.at])).toEqual([[3, t1], [2, nov22], [1, nov22]]);
+    s.flush();
+    expect(JSON.parse(readFileSync(file, 'utf8')).fixes).toEqual(['redate-0003-2026-11']);
+    // once only: a later start leaves the date alone
+    const again = new AppetizerService({ path: file, baseUrl: () => '', now: () => t1 + 86_400_000 });
+    expect(again.list().items[0].at).toBe(t1);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it('a corrupt file is set aside, not fatal', () => {
     const dir = mkdtempSync(join(tmpdir(), 'coinnibal-appetizer-bad-'));
     const file = join(dir, 'appetizers.json');
