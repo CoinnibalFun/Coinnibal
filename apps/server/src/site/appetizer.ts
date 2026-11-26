@@ -472,6 +472,18 @@ export class AppetizerService {
     return { ...e };
   }
 
+  /**
+   * Redates card `code` to now and draws it anew: the same number, link and post, today's date on the image. The share
+   * page's image URL carries the date, so X fetches the new picture for a post made after this.
+   */
+  refresh(code: string): AppetizerEntry {
+    const e = this.find(code);
+    e.at = this.now();
+    this.png.delete(e.code);
+    this.changed();
+    return { ...e };
+  }
+
   // ---------- the share page and the image ----------
 
   /** Startup self-check result (`shareCardSelfCheck`): when drawing cannot work here, images fall back at once. */
@@ -526,13 +538,14 @@ export class AppetizerService {
         res.end('Too many cards. Try again in a minute.');
         return true;
       }
-      draw = this.renderer.render({ kind: 'appetizer', card: { no: e.no, handle: e.handle, at: e.at }, site: siteHostOf(origin) });
+      const at = e.at;
+      draw = this.renderer.render({ kind: 'appetizer', card: { no: e.no, handle: e.handle, at }, site: siteHostOf(origin) });
       this.drawing.set(code, draw);
       draw.then(
         (png) => {
           this.drawing.delete(code);
-          // a card deleted while it was drawn is not cached
-          if (this.byCode.get(code) !== e) return;
+          // a card deleted or redated while it was drawn is not cached
+          if (this.byCode.get(code) !== e || e.at !== at) return;
           this.png.set(code, png);
           if (this.png.size > PNG_CACHE) this.png.delete(this.png.keys().next().value!);
         },
@@ -575,7 +588,8 @@ export function appetizerPage(card: AppetizerCard, origin: string): string {
   const title = `The Appetizer is out · Early card No. ${appetizerNo(card.no)} · @${card.handle}`;
   const desc = `Grabbed my seat before the coinnibals showed up. A ${BRAND_NAME} early card for early fans.`;
   const page = `${origin}${appetizerPath(card.code)}`;
-  const img = `${page}.png`;
+  // the date in the URL: a redated card (`refresh`) is a new picture to X, which keeps images by URL
+  const img = `${page}.png?v=${card.at}`;
   const landing = `${origin}/#appetizer`;
   return `<!doctype html>
 <html lang="en">
@@ -602,7 +616,7 @@ export function appetizerPage(card: AppetizerCard, origin: string): string {
 <style>body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;background:#0F2A30;color:#F6EEDA;font-family:system-ui,sans-serif;padding:24px;box-sizing:border-box}img{max-width:min(100%,900px);height:auto;border-radius:18px;border:4px solid #04181C}a{display:inline-block;padding:14px 28px;border-radius:999px;background:#F2C14E;color:#04181C;font-weight:700;text-decoration:none;border:3px solid #04181C}</style>
 </head>
 <body>
-<img src="${esc(appetizerPath(card.code))}.png" width="${APPETIZER_IMAGE.width}" height="${APPETIZER_IMAGE.height}" alt="${esc(title)}">
+<img src="${esc(appetizerPath(card.code))}.png?v=${card.at}" width="${APPETIZER_IMAGE.width}" height="${APPETIZER_IMAGE.height}" alt="${esc(title)}">
 <a href="${esc(landing)}">Get your own early card</a>
 </body>
 </html>

@@ -1200,11 +1200,17 @@ export class SiteApi {
       }
       case 'appetizers': {
         // the Appetizer cards, newest first: GET the list (`?offset`, `?limit`, `?q` a handle or a wallet, `?complete=1|0`
-        // with or without a post link), DELETE `<code>`
+        // with or without a post link), DELETE `<code>`, POST `<code>/refresh` (today's date, same number)
         if (seg.length === 1) {
           this.method(req, 'GET');
           const complete = q.get('complete');
           return send(res, 200, this.appetizers.list({ limit: Number(q.get('limit') ?? 100), offset: Number(q.get('offset') ?? 0), q: q.get('q'), complete: complete === '1' ? true : complete === '0' ? false : null }));
+        }
+        if (seg.length === 3 && seg[2] === 'refresh') {
+          this.method(req, 'POST');
+          const entry = this.appetizers.refresh(seg[1]);
+          this.ext.log?.(`appetizer: ${wallet} redated card No. ${entry.no}`);
+          return send(res, 200, { entry });
         }
         if (seg.length !== 2) break;
         this.method(req, 'DELETE');
