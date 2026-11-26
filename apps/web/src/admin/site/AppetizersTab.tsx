@@ -18,7 +18,7 @@ type Filter = 'all' | 'complete' | 'open';
  * (in full, with a copy button), when it was claimed, when the visitor said they followed (and liked our X post),
  * the X post that shared it (checked on X, or kept unchecked when X did not answer) and how often its image was
  * fetched. A card is complete once its post link is in. A search (handle or wallet), a complete / not yet filter, the
- * totals, the CSV of every card, and delete (with a confirm).
+ * totals, the CSV of every card, redate (today's date, the same number) and delete (each with a confirm).
  */
 export function AppetizersTab({ api, onTotals }: { api: AdminApi; onTotals?: (t: { total: number; posted: number }) => void }) {
   const [items, setItems] = useState<AppetizerEntry[] | null>(null);
@@ -56,6 +56,20 @@ export function AppetizersTab({ api, onTotals }: { api: AdminApi; onTotals?: (t:
   useEffect(() => {
     if (items) onTotals?.({ total, posted });
   }, [items, total, posted, onTotals]);
+
+  const refresh = async (e: AppetizerEntry) => {
+    if (!window.confirm(`Put today's date on card No. ${no(e.no)} (@${e.handle})? The number and the link stay.`)) return;
+    setBusy(e.code);
+    try {
+      const r = await api.appetizers.refresh(e.code);
+      setItems((list) => list?.map((x) => (x.code === e.code ? r.entry : x)) ?? null);
+      setFlash('ok', `Card No. ${no(e.no)} now carries today's date. Ask @${e.handle} to open the card again and post it anew.`);
+    } catch (err) {
+      setFlash('err', errText(err));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const remove = async (e: AppetizerEntry) => {
     if (!window.confirm(`Delete card No. ${no(e.no)} (@${e.handle})? It cannot be brought back.`)) return;
@@ -157,6 +171,9 @@ export function AppetizersTab({ api, onTotals }: { api: AdminApi; onTotals?: (t:
                   <td>{e.post ? e.postVerified ? '✓ verified' : 'unverified' : '—'}</td>
                   <td className="num">{e.views.toLocaleString('en-US')}</td>
                   <td>
+                    <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => void refresh(e)}>
+                      Redate
+                    </Button>
                     <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => void remove(e)}>
                       Delete
                     </Button>

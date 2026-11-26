@@ -1,4 +1,5 @@
 import type {
+  AppetizerEntry,
   AppetizerList,
   ArenaPricingSettings,
   NftCollectionAdminView,
@@ -417,6 +418,8 @@ export function adminApi(token: string) {
       csv: () => downloadCsv('/api/admin/appetizers.csv', token, 'coinnibal-appetizers.csv'),
       /** `DELETE /api/admin/appetizers/<code>`: removes one card. */
       remove: (code: string) => request<{ ok: true; total: number; posted: number; verified: number }>(`/api/admin/appetizers/${id(code)}`, { method: 'DELETE', token }),
+      /** `POST /api/admin/appetizers/<code>/refresh`: today's date on the card; the same number, link and post. */
+      refresh: (code: string) => request<{ entry: AppetizerEntry }>(`/api/admin/appetizers/${id(code)}/refresh`, { method: 'POST', token }),
     },
     /** `GET /api/admin/arena-scaling`: the arena instance scaler's settings, every arena's instances and its decisions. */
     arenaScaling: () => request<ArenaScalingView>('/api/admin/arena-scaling', { token }),

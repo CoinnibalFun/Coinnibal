@@ -228,8 +228,8 @@ describe('the Appetizer: claims, post links, the share page and the admin list',
     expect(r.headers.get('content-security-policy')).toMatch(/default-src 'none'/);
     const html = r.text;
     expect(html).toContain('<meta name="twitter:card" content="summary_large_image">');
-    expect(html).toContain(`<meta property="og:image" content="https://coinnibal.fun/appetizer/${code}.png">`);
-    expect(html).toContain(`<meta name="twitter:image" content="https://coinnibal.fun/appetizer/${code}.png">`);
+    expect(html).toContain(`<meta property="og:image" content="https://coinnibal.fun/appetizer/${code}.png?v=${first.card.at}">`);
+    expect(html).toContain(`<meta name="twitter:image" content="https://coinnibal.fun/appetizer/${code}.png?v=${first.card.at}">`);
     expect(html).toContain('<meta property="og:image:height" content="675">');
     expect(html).toContain('<title>The Appetizer is out · Early card No. 0001 · @Nibbler_01</title>');
     expect(html).toContain('Grabbed my seat before the coinnibals showed up. A Coinnibal early card for early fans.');
@@ -287,6 +287,23 @@ describe('the Appetizer: claims, post links, the share page and the admin list',
     expect(lines).toHaveLength(4);
     expect(lines[1]).toMatch(new RegExp(`^1,Nibbler_01,${alice},(\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z),\\1,,https://x.com/Nibbler_01/status/42,yes,yes,\\d+$`));
     expect(lines[2]).toMatch(/^2,CoinFan,0x[0-9a-fA-F]{40},([^,]+),\1,\1,,,no,0$/);
+  });
+
+  it('redates a card: today on the card and its image URL, the same number, link and post', async () => {
+    const code = first.card.code;
+    expect((await h.call('POST', `/api/admin/appetizers/${code}/refresh`, { wallet: alice })).status).toBe(403);
+    expect((await h.call('POST', `/api/admin/appetizers/AAAAAAAAAA/refresh`, { wallet: h.admin })).status).toBe(404);
+    const before = ((await h.call('GET', '/api/admin/appetizers', { wallet: h.admin })).body as AppetizerList).items.find((e) => e.code === code)!;
+    await new Promise((r) => setTimeout(r, 5));
+    const r = await h.call('POST', `/api/admin/appetizers/${code}/refresh`, { wallet: h.admin });
+    expect(r.status).toBe(200);
+    const entry = (r.body as { entry: AppetizerList['items'][number] }).entry;
+    expect(entry.at).toBeGreaterThan(before.at);
+    expect(entry).toMatchObject({ code, no: before.no, handle: before.handle, wallet: before.wallet, post: before.post, postVerified: before.postVerified });
+    expect((await h.call('GET', `/appetizer/${code}`)).text).toContain(`/appetizer/${code}.png?v=${entry.at}"`);
+    // the owner's claim again brings the redated card back
+    const again = await claim(h, alice, 'Nibbler_01');
+    expect((again.body as AppetizerResponse).card).toMatchObject({ code, no: before.no, at: entry.at });
   });
 
   it('deletes a card: gone from the list, the page and the image; its number is not handed out again', async () => {
