@@ -19,7 +19,7 @@ set -euo pipefail
 # exist; game.coinnibal.fun needs a new A record first, README "DNS")
 DOMAIN_DEFAULT="game.elymum.io"
 # a private repository: the SSH URL, read with the deploy key below (an https:// URL cannot clone it without a token)
-REPO_DEFAULT="git@github.com:CoinnibalFun/Coinnibal.git"
+REPO_DEFAULT="git@github.com:CoinnibalFun/coinnibal-core.git"
 BRANCH_DEFAULT="main"
 # The live server's installed names, kept from before the rename (Elymum, November 2026); changing them moves the
 # data. The same literals as deploy/vps/lib.sh (this file runs before the checkout exists; it sources lib.sh after),

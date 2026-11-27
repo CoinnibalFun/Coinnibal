@@ -26,7 +26,7 @@ window.SITE_HOST = QS.get('site') || 'coinnibal.fun';
   const CW = 1200, CH = 675; // APPETIZER_IMAGE
   const CARD_FONT = '"Fraunces Card"';
   const FONTS = { display: CARD_FONT, body: '"DM Sans"', mono: '"Geist Mono"' };
-  const DAY = Date.UTC(2026, 10, 22, 12); // the day the Appetizers went out
+  const DAY = Date.UTC(2026, 10, 27, 12); // the day the Appetizers went out
   const INK = C.ink, CREAM = C.cream, TEAL_INK = '#1F5566';
 
   /* ── the beats ── */
