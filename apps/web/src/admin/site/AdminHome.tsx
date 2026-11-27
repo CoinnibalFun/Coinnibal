@@ -1,7 +1,7 @@
 import { GAS_SYMBOL } from '@coinnibal/shared';
 import type { SiteCounts, SiteSettings } from '@coinnibal/shared';
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { CoinCharacter, CoinMark, StatusPill, Tabs, TabPanel, tabId, type TabItem } from '../../design';
+import { CoinMark, StampSpinner, StatusPill, Tabs, TabPanel, tabId, type TabItem } from '../../design';
 import { adminApi } from '../../site/api';
 import { AdminPanel, type ChainTab } from '../AdminPanel';
 import { ADMIN_GROUPS, CHAIN_GROUPS, GROUP_LABEL, adminHash, groupSummary, isAdminView, parseAdminHash, type AdminGroup, type AdminPage, type AdminView, type CommunityTab } from '../groups';
@@ -114,19 +114,28 @@ export function AdminHome({ net, reloadNet }: { net: AdminNetwork; reloadNet: ()
     document.getElementById(tabId('ad', next))?.focus();
   };
 
+  // nothing of the workshop shows before an admin session: no drawer names, no status, only the sign-in
+  if (state.kind !== 'admin') {
+    return (
+      <div className="ad-shell ad-shell--gate" data-testid="admin-gate">
+        <main className="ad-gate-page">
+          <CoinMark size={48} />
+          {state.kind === 'checking' ? <StampSpinner label="Checking the session" /> : <SignInCard state={state} />}
+          {state.kind === 'error' && (
+            <p className="ad-note" role="alert">
+              {state.message}
+            </p>
+          )}
+        </main>
+      </div>
+    );
+  }
+
   let panel: ReactNode;
   if (view) panel = <AdminPanel net={net} api={api} tab={page as AdminView} go={(t) => go(t)} reloadNet={reloadNet} onRole={setRole} token={token} />;
   else if (CHAIN_GROUPS.includes(tab)) panel = <AdminPanel net={net} api={api} tab={tab as ChainTab} go={(t) => go(t)} reloadNet={reloadNet} onRole={setRole} />;
-  else if (!api)
-    panel = (
-      <section className="ad-gate" role="status">
-        <CoinCharacter paint="cream" mood="sleepy" size={96} feet />
-        <div>
-          <h2 className="ad-gate__title">{state.kind === 'checking' ? 'Checking the session…' : 'This drawer is locked.'}</h2>
-          <p>The WL, collab, task, integrity, feedback, appetizer and site settings drawers open for the admin wallet. Sign in at the top right: one free signature, no transaction.</p>
-        </div>
-      </section>
-    );
+  // an admin session always carries its api (the gate above returned before this)
+  else if (!api) panel = null;
   else if (tab === 'community')
     panel = (
       <>
