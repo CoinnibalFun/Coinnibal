@@ -5,6 +5,7 @@ import {
   COLLAB_STATUSES,
   GAME_ACCESS_MODES,
   SITE_LIMITS,
+  PREVIOUS_APPETIZER_POST_URLS,
   SITE_SETTINGS_DEFAULT,
   SITE_X_HANDLE_DEFAULT,
   WL_STATUSES,
@@ -265,6 +266,12 @@ export class SiteStore {
         // a file saved before the setting existed gets the default; a stored null (the step hidden) stays null
         appetizerPostUrl: !('appetizerPostUrl' in settings) ? d.appetizerPostUrl : isXStatusUrl(settings.appetizerPostUrl) ? settings.appetizerPostUrl : null,
       };
+      // an earlier default post moves to the current one (a post the admin chose stays)
+      if (this.settingsV.appetizerPostUrl !== null && PREVIOUS_APPETIZER_POST_URLS.includes(this.settingsV.appetizerPostUrl)) {
+        this.log(`site: appetizerPostUrl ${this.settingsV.appetizerPostUrl} is a previous default; now ${d.appetizerPostUrl}`);
+        this.settingsV.appetizerPostUrl = d.appetizerPostUrl;
+        this.save('settings');
+      }
       if (previous) {
         this.log(`site: xHandle @${handle} is a previous default; now @${this.settingsV.xHandle}`);
         this.save('settings');

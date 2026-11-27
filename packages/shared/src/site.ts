@@ -45,13 +45,16 @@ export interface SiteSettings {
   launchPostUrl: string | null;
   /**
    * The X post the Appetizer's "like and comment" step opens (`appetizer.ts`): an x.com / twitter.com status link;
-   * null hides the step. Defaults to the project's first post (`APPETIZER_POST_URL_DEFAULT`).
+   * null hides the step. Defaults to the project's Appetizer post (`APPETIZER_POST_URL_DEFAULT`).
    */
   appetizerPostUrl: string | null;
 }
 
-/** The project's first X post: the Appetizer's "like and comment" step until the admin sets another (or none). */
-export const APPETIZER_POST_URL_DEFAULT = 'https://x.com/Coinnibalfun/status/2123416055406354866';
+/** The project's Appetizer post on X: the Appetizer's "like and comment" step until the admin sets another (or none). */
+export const APPETIZER_POST_URL_DEFAULT = 'https://x.com/Coinnibalfun/status/2126283168374251696';
+
+/** Earlier defaults of `appetizerPostUrl`: a stored one moves to the current default on start. */
+export const PREVIOUS_APPETIZER_POST_URLS: readonly string[] = ['https://x.com/Coinnibalfun/status/2123416055406354866'];
 
 export const SITE_SETTINGS_DEFAULT: SiteSettings = {
   wlOpen: false,
