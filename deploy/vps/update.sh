@@ -210,15 +210,6 @@ if [[ "$refresh" -eq 1 ]]; then
   remote="$deployed"
   same=1
 else
-  # The working repository moves to CoinnibalFun/coinnibal-core (private) and CoinnibalFun/Coinnibal becomes a public
-  # copy with its own history: once coinnibal-core answers, origin (any earlier name of the repository) points there
-  # for good.
-  origin_url="$(git remote get-url origin 2>/dev/null || true)"
-  origin_lc="${origin_url,,}"
-  if [[ "$origin_lc" =~ [:/](coinnibalfun/coinnibal|furkan3152/solagel)(\.git)?/?$ ]] && timeout 60 git ls-remote --exit-code --heads git@github.com:CoinnibalFun/coinnibal-core.git "$branch" >/dev/null 2>&1; then
-    git remote set-url origin git@github.com:CoinnibalFun/coinnibal-core.git
-    log "origin moved: $origin_url -> git@github.com:CoinnibalFun/coinnibal-core.git"
-  fi
   if ! timeout 120 git fetch --quiet origin "$branch" "+refs/tags/ci-green-$branch:refs/tags/ci-green-$branch" 2>/dev/null; then
     if ! timeout 120 git fetch --quiet origin "$branch"; then
       log "git fetch failed (network or deploy key); will retry at the next check"
@@ -242,10 +233,13 @@ else
     exit 0
   fi
 fi
-# a commit that does not descend from the deployed one (a rewritten history, or a remote that is not this server's
-# repository) is never deployed on its own: COINNIBAL_ALLOW_UNRELATED=1 in .env lets one through by hand
+# a commit that does not descend from the deployed one is never deployed on its own (a remote that is not this
+# server's repository), unless it carries exactly the deployed files (a rewritten history of the same code):
+# COINNIBAL_ALLOW_UNRELATED=1 in .env lets any one through by hand
 if [[ "$same" -eq 0 && -n "$deployed" && "$remote" != "$deployed" ]] && git cat-file -e "$deployed^{commit}" 2>/dev/null \
-  && ! git merge-base --is-ancestor "$deployed" "$remote" 2>/dev/null && [[ "$(env_get_renamed ALLOW_UNRELATED)" != "1" ]]; then
+  && ! git merge-base --is-ancestor "$deployed" "$remote" 2>/dev/null \
+  && [[ "$(git rev-parse "$deployed^{tree}")" != "$(git rev-parse "$remote^{tree}")" ]] \
+  && [[ "$(env_get_renamed ALLOW_UNRELATED)" != "1" ]]; then
   if [[ "$(cat "$COINNIBAL_STATE/unrelated" 2>/dev/null)" != "$remote" ]]; then
     echo "$remote" >"$COINNIBAL_STATE/unrelated"
     notify "not deploying ${remote:0:12}: it does not descend from the deployed ${deployed:0:12} (rewritten history or wrong remote?); set COINNIBAL_ALLOW_UNRELATED=1 to deploy it"
