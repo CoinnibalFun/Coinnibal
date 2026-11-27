@@ -7,25 +7,6 @@
   gap: 24px;
 }
 
-/* the locked drawer */
-.ad-gate {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 26px 28px;
-  border: var(--stroke) dashed var(--stone);
-  border-radius: var(--r-card);
-  background: var(--surface);
-}
-.ad-gate__title {
-  margin-bottom: 6px;
-  font-size: 28px;
-}
-.ad-gate p {
-  max-width: 56ch;
-  color: var(--ink-2);
-}
-
 /* counts: a strip of stat cells, Geist Mono figures */
 .ad-counts {
   display: grid;
@@ -437,10 +418,6 @@ label.ad-cap,
   .ad-int__banform {
     grid-template-columns: 1fr;
   }
-  .ad-gate {
-    flex-direction: column;
-    align-items: flex-start;
-  }
 }
 .ad-filters .ad-int__narrow {
   width: 130px;
@@ -655,4 +632,18 @@ label.ad-cap,
 }
 .ad-fb__more {
   align-self: flex-start;
+}
+
+/* /admin before an admin session: the sign-in alone, centred */
+.ad-gate-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 24px;
+}
+.ad-gate-page .ad-signin {
+  width: min(420px, 100%);
 }

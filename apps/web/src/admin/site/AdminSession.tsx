@@ -148,7 +148,7 @@ export function SignInCard({ state }: { state: AdminState }) {
         {address ? 'Sign in' : 'Connect your wallet'}
       </h2>
       <p className="ad-card__lede">
-        {state.kind === 'denied' ? 'This wallet is not an admin. Connect the owner wallet.' : address ? 'One free signature. No transaction.' : 'Use the owner wallet. It deploys the contracts and owns them.'}
+        {state.kind === 'denied' ? 'This wallet is not an admin. Connect the admin wallet.' : address ? 'One free signature. No transaction.' : 'Admins only. Use the admin wallet.'}
       </p>
       <div className="ad-actions">
         {address ? (
