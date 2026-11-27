@@ -456,13 +456,24 @@ describe('the Appetizer: limits and fallbacks', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('the post to like and comment on: the first post by default, a status link, null hides it (kept across a restart)', () => {
+  it('moves a stored earlier default post to the current one, once; a post the admin chose stays', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-appetizer-post-old-'));
+    mkdirSync(join(dir, 'site'), { recursive: true });
+    writeFileSync(join(dir, SITE_FILES.settings), JSON.stringify({ wlOpen: false, launch: 1, xHandle: 'coinnibalfun', appetizerPostUrl: 'https://x.com/Coinnibalfun/status/2123416055406354866' }));
+    expect(new SiteStore(dir).settings.appetizerPostUrl).toBe('https://x.com/Coinnibalfun/status/2126283168374251696');
+    expect(JSON.parse(readFileSync(join(dir, SITE_FILES.settings), 'utf8')).appetizerPostUrl).toBe('https://x.com/Coinnibalfun/status/2126283168374251696');
+    writeFileSync(join(dir, SITE_FILES.settings), JSON.stringify({ wlOpen: false, launch: 1, xHandle: 'coinnibalfun', appetizerPostUrl: 'https://x.com/coinnibalfun/status/7' }));
+    expect(new SiteStore(dir).settings.appetizerPostUrl).toBe('https://x.com/coinnibalfun/status/7');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('the post to like and comment on: the Appetizer post by default, a status link, null hides it (kept across a restart)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'coinnibal-appetizer-post-'));
     mkdirSync(join(dir, 'site'), { recursive: true });
     // a settings file from before the setting existed: the default
     writeFileSync(join(dir, SITE_FILES.settings), JSON.stringify({ wlOpen: false, launch: 1, xHandle: 'coinnibalfun' }));
     const s = new SiteStore(dir);
-    expect(s.settings.appetizerPostUrl).toBe('https://x.com/Coinnibalfun/status/2123416055406354866');
+    expect(s.settings.appetizerPostUrl).toBe('https://x.com/Coinnibalfun/status/2126283168374251696');
     expect(() => s.updateSettings({ appetizerPostUrl: 'https://example.com/x' })).toThrow();
     expect(s.updateSettings({ appetizerPostUrl: 'https://x.com/coinnibalfun/status/7' }).appetizerPostUrl).toBe('https://x.com/coinnibalfun/status/7');
     expect(new SiteStore(dir).settings.appetizerPostUrl).toBe('https://x.com/coinnibalfun/status/7');
@@ -473,7 +484,7 @@ describe('the Appetizer: limits and fallbacks', () => {
 
   it('shows our post (appetizerPostUrl, only that one) for the sheet box: read from X once, cached, null when unset or unreadable', async () => {
     const h = await harness();
-    const id = '2123416055406354866';
+    const id = '2126283168374251696';
     fakeX.synd.set(id, {
       ...tweet(id, 'Coinnibalfun', 'The kitchen is open &amp; hungry https://t.co/x0 https://t.co/pic', ['https://coinnibal.fun']),
       user: { id_str: '1', screen_name: 'Coinnibalfun', name: 'Coinnibal', profile_image_url_https: 'https://pbs.twimg.com/profile_images/1/me_normal.png' },

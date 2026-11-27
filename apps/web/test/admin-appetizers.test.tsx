@@ -143,14 +143,14 @@ describe('admin: the Appetizers drawer', () => {
   });
 
   it('Settings: the post to like and comment on, checked as an X post link; emptied, it is saved as null', async () => {
-    const live = { ...SETTINGS, appetizerOpen: true, appetizerPostUrl: 'https://x.com/Coinnibalfun/status/2123416055406354866' };
+    const live = { ...SETTINGS, appetizerOpen: true, appetizerPostUrl: 'https://x.com/Coinnibalfun/status/2126283168374251696' };
     ({ calls, restore } = mockFetch({
       'GET /api/admin/settings': { settings: live, gameAccessEnv: null },
       'PUT /api/admin/settings': (c: Call) => ({ settings: { ...live, ...(c.body as object) }, gameAccessEnv: null }),
     }));
     ui(<SettingsTab api={api} />);
     const field = (await screen.findByLabelText(/the post to like and comment on/)) as HTMLInputElement;
-    expect(field.value).toBe('https://x.com/Coinnibalfun/status/2123416055406354866');
+    expect(field.value).toBe('https://x.com/Coinnibalfun/status/2126283168374251696');
     fireEvent.change(field, { target: { value: 'https://example.com/nope' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
     expect(await screen.findByText(/Not a link to an X post/)).toBeTruthy();

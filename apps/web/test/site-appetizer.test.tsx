@@ -11,7 +11,7 @@ import { SETTINGS, installDomStubs, json, mockFetch, type Call } from './site-he
 
 const WALLET = '0x52908400098527886E0F7030069857D2E4169EE7';
 const CARD = { code: 'Ab3dE5gH9k', no: 42, handle: 'Satoshi_Nibbles', at: Date.UTC(2026, 10, 22, 10) };
-const OUR_POST = 'https://x.com/Coinnibalfun/status/2123416055406354866';
+const OUR_POST = 'https://x.com/Coinnibalfun/status/2126283168374251696';
 
 let restore = () => {};
 beforeEach(() => {
@@ -120,8 +120,8 @@ describe('the Appetizer on the landing', { timeout: 30_000 }, () => {
     const dialog = await openSheet();
     const like = within(dialog).getByTestId('ap-like');
     // X's own like dialog and reply composer for our post
-    expect(like.getAttribute('href')).toBe('https://x.com/intent/like?tweet_id=2123416055406354866');
-    expect(within(dialog).getByTestId('ap-reply').getAttribute('href')).toBe('https://x.com/intent/tweet?in_reply_to=2123416055406354866');
+    expect(like.getAttribute('href')).toBe('https://x.com/intent/like?tweet_id=2126283168374251696');
+    expect(within(dialog).getByTestId('ap-reply').getAttribute('href')).toBe('https://x.com/intent/tweet?in_reply_to=2126283168374251696');
     expect(within(dialog).getByText('Like and comment on our post')).toBeTruthy();
     follow(dialog);
     await waitFor(() => expect(within(dialog).getByTestId('ap-step-follow').className).toContain('is-done'));
