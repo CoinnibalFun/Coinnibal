@@ -55,7 +55,7 @@ bash /home/<user>/install.sh
 ```
 
 It asks for the domain (`GAME_DOMAIN`, section 2), the repository (the SSH URL of the private repository, default
-`git@github.com:CoinnibalFun/coinnibal-core.git`: it makes a read-only **deploy key** and shows the steps to add it on GitHub;
+`git@github.com:CoinnibalFun/Coinnibal.git`: it makes a read-only **deploy key** and shows the steps to add it on GitHub;
 an `https://` URL cannot clone a private repository) and the branch. Then it updates Ubuntu, installs
 Docker, automatic security updates of Ubuntu's packages (no automatic reboot; the rest: section 6, "Updates"), the
 firewall, fail2ban, a persistent journal, network tuning, downloads the code to `/opt/elymum`, opens
@@ -63,7 +63,7 @@ firewall, fail2ban, a persistent journal, network tuning, downloads the code to 
 10) and waits for `https://<GAME_DOMAIN>/api/health?live=1`.
 Running it again is safe. A server installed while the repository was public may still fetch over `https://`: run
 the installer again (it sets the SSH URL and shows its deploy key), or add `/root/.ssh/elymum_deploy.pub` as a deploy
-key and `git -C /opt/elymum remote set-url origin git@github.com:CoinnibalFun/coinnibal-core.git`.
+key and `git -C /opt/elymum remote set-url origin git@github.com:CoinnibalFun/Coinnibal.git`.
 
 ## 4. Settings (`/opt/elymum/.env`)
 
